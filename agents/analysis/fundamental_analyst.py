@@ -5,7 +5,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.output_parsers import StrOutputParser
 
-from agents.base_agent import BaseAgent
+from agents.base.base_analyst import BaseAnalyst
 
 from tools.fundamental_tools import process_fundamental_data
 
@@ -40,7 +40,7 @@ GROWTH:
     return {"messages": [HumanMessage(content=content)]}
 
 
-class FundamentalAnalyst(BaseAgent):
+class FundamentalAnalyst(BaseAnalyst):
 
     prompt_path = "prompts/fundamental_analyst_prompt.yaml"
 

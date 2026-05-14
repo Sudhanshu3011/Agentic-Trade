@@ -13,14 +13,25 @@ class InvestmentDebateState(TypedDict):
         "Pessimistic investment thesis outlining key risks, weaknesses, and downside triggers.",
     ]
     debate_history: Annotated[
-        str, "Chronological record of the investment debate discussion."
+        str,
+        "Chronological record of the investment debate discussion.",
     ]
     final_decision: Annotated[
         str,
         "Final decision made by the research manager after evaluating both perspectives.",
     ]
-    current_response: Annotated[str, "Current outcome of the researcher"]
-    debate_rounds: Annotated[int, "Number of debate iterations conducted."]
+    last_speaker: Annotated[
+        str,
+        "Last agent that produced output (bull / bear / manager).",
+    ]
+    speaker_history: Annotated[
+        List[str],
+        "Ordered list of agents that participated in the debate.",
+    ]
+    debate_rounds: Annotated[
+        int,
+        "Number of debate iterations conducted.",
+    ]
 
 
 class AgentState(TypedDict):
@@ -53,9 +64,6 @@ class AgentState(TypedDict):
     ]
     news_analyst_report: Annotated[
         str, "Summary of recent high-impact news and PR events."
-    ]
-    final_report: Annotated[
-        str, "single concatenated report combining all analyst report"
     ]
 
     # --- Strategic Perspectives ---

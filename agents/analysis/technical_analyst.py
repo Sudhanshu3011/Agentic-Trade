@@ -7,7 +7,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.output_parsers import StrOutputParser
 
-from agents.base_agent import BaseAgent
+from agents.base.base_analyst import BaseAnalyst
 
 from tools.technical_tools import process_technical_data
 
@@ -47,7 +47,7 @@ Support and Resistance Levels:
     return {"messages": [HumanMessage(content=content)]}
 
 
-class TechnicalAnalyst(BaseAgent):
+class TechnicalAnalyst(BaseAnalyst):
 
     prompt_path = "prompts/technical_analyst_prompt.yaml"
 

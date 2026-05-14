@@ -7,7 +7,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.output_parsers import StrOutputParser
 
-from agents.base_agent import BaseAgent
+from agents.base.base_analyst import BaseAnalyst
 
 from tools.market_tools import process_market_data
 
@@ -36,7 +36,7 @@ SENSEX:
     return {"messages": [HumanMessage(content=content.strip())]}
 
 
-class MarketAnalyst(BaseAgent):
+class MarketAnalyst(BaseAnalyst):
 
     prompt_path = "prompts/market_analyst_prompt.yaml"
 

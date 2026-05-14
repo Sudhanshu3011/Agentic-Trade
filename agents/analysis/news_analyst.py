@@ -1,7 +1,7 @@
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableParallel, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
-from agents.base_agent import BaseAgent
+from agents.base.base_analyst import BaseAnalyst
 from tools.news_tools import (
     get_company_news,
     get_indian_market_news,
@@ -26,7 +26,7 @@ GLOBAL MARKET NEWS:
     return {"messages": [HumanMessage(content=content)]}
 
 
-class NewsAnalyst(BaseAgent):
+class NewsAnalyst(BaseAnalyst):
 
     prompt_path = "prompts/news_analyst_prompt.yaml"
 

@@ -13,7 +13,7 @@ def load_structured_prompt(file_path: str) -> str:
     return yaml.dump(data, sort_keys=False, allow_unicode=True)
 
 
-class BaseAgent:
+class BaseAnalyst:
     """
     Provides shared setup for all agents:
       - LLM instance via get_llm()
@@ -31,12 +31,12 @@ class BaseAgent:
 
         yaml_instructions = load_structured_prompt(self.prompt_path)
 
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", yaml_instructions),
-            MessagesPlaceholder(variable_name="messages"),
-        ])
+        self.prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", yaml_instructions),
+                MessagesPlaceholder(variable_name="messages"),
+            ]
+        )
 
     def run(self, *args, **kwargs):
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement run()"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} must implement run()")

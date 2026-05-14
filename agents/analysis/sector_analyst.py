@@ -5,7 +5,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda, RunnableParallel, RunnableBranch
 
-from agents.base_agent import BaseAgent, load_structured_prompt
+from agents.base.base_analyst import BaseAnalyst, load_structured_prompt
 from core.constants import get_sector_catalog
 from core.logging import get_logger
 from tools.sector_tools import (
@@ -56,7 +56,7 @@ Sector API Data (PDF Content)
     return {"messages": [HumanMessage(content=content)]}
 
 
-class SectorAnalyst(BaseAgent):
+class SectorAnalyst(BaseAnalyst):
     """
     Agent responsible for identifying a company's sector and analyzing
     the corresponding industry report.

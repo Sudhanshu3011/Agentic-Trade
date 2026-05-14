@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, AsyncGenerator
 from datetime import datetime
 
 from pydantic import BaseModel
@@ -12,7 +12,6 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.sql import func
 
 import config.settings as settings
-
 
 # ── Engine & Base ─────────────────────────────────────────────────────────────
 
@@ -30,11 +29,13 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
 )
 
+
 class Base(DeclarativeBase):
     pass
 
 
 # ── Database Models ────────────────────────────────────────────────────────────
+
 
 class PDFDocument(Base):
     __tablename__ = "pdf_documents"
@@ -49,21 +50,25 @@ class PDFDocument(Base):
 
 # ── Pydantic Schemas ───────────────────────────────────────────────────────────
 
+
 class IngestResponse(BaseModel):
     message: str
     pdf_name: str
     total_pages: int
     file_path: str
 
+
 class PDFContentResponse(BaseModel):
     pdf_name: str
     content: str
     total_pages: int
 
+
 class SectorSelection(BaseModel):
     sector_name: str
     confidence: float
     reason: str
+
 
 class PDFListItem(BaseModel):
     pdf_name: str
@@ -76,8 +81,20 @@ class PDFListItem(BaseModel):
 
 # ── Dependency & Init ─────────────────────────────────────────────────────────
 
-async def get_db() -> AsyncSession:
-    """Dependency: yields a DB session per request."""
+
+# async def get_db() -> AsyncSession:
+#     """Dependency: yields a DB session per request."""
+#     async with AsyncSessionLocal() as session:
+#         try:
+#             yield session
+#         except Exception:
+#             await session.rollback()
+#             raise
+#         finally:
+#             await session.close()
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
