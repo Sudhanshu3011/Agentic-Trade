@@ -1,12 +1,5 @@
-"""
-Sector data tools used by SectorAnalyst and API endpoints.
-Contains main functions called directly by the SectorAnalyst agent.
-"""
-
 from typing import Any
-
 import yfinance as yf
-
 from core.constants import SectorName
 from core.logging import get_logger
 from tools.utils.retry_utils import with_retry
@@ -41,7 +34,12 @@ def get_company_sector(ticker: str) -> dict[str, Any]:
         info = stock.info
 
         # yfinance may return None or a dict containing error info
-        if info and isinstance(info, dict):
+        if (
+            isinstance(info, dict)
+            and info
+            and info.get("sector") not in [None, "", "N/A"]
+            and info.get("industry") not in [None, "", "N/A"]
+        ):
             result.update({
                 "status": "success",
                 "company": info.get("longName", "N/A"),

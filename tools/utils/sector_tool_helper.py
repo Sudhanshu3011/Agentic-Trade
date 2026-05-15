@@ -7,13 +7,9 @@ import json
 import logging
 import re
 from typing import Any
-from urllib.parse import quote
 
-import httpx
-
-import config.settings as settings
 from core.constants import SectorName
-from tools.utils.retry_utils import with_retry
+from service.pdf_service import get_pdf_content
 
 logger = logging.getLogger(__name__)
 
@@ -61,31 +57,16 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     return result
 
 
-@with_retry(retries=3, delay=2.0, backoff=2.0)
-def _fetch_sector_api_data(api_url: str, sector_name: str) -> Any:
-    """Internal helper to execute the HTTP request to the PDF/Sector API."""
-    with httpx.Client(timeout=120.0) as client:
-        response = client.get(api_url)
-
-    if response.status_code >= 400:
-        logger.error(f"API error {response.status_code} | sector={sector_name}")
-        return {"error": f"Sector API returned {response.status_code}"}
-
-    return response.json()
-
-
 def _fetch_sector_data(sector_name: str) -> dict[str, Any]:
     """
     Fetch the structured PDF analysis payload for a validated catalog sector.
+    Now fetches directly from Cloudinary via pdf_service.
     """
     sector_name = str(sector_name).strip()
-    api_path = f"/pdf/{quote(sector_name, safe='')}"
-    api_url = f"{settings.API_BASE_URL.rstrip('/')}{api_path}"
     
     result = {
         "status": "failed",
         "sector": sector_name,
-        "api_url": api_url,
         "data": None,
         "error": None,
     }
@@ -96,22 +77,15 @@ def _fetch_sector_data(sector_name: str) -> dict[str, Any]:
         result["error"] = f"Sector {sector_name!r} is not in the supported catalog"
         return result
 
-    logger.info(f"Requesting sector report | sector={sector_name}")
+    logger.info(f"Requesting sector report from Cloudinary | sector={sector_name}")
 
-    try:
-        result["data"] = _fetch_sector_api_data(api_url, sector_name)
-        if isinstance(result["data"], dict) and "error" in result["data"]:
-             result["error"] = result["data"]["error"]
-        else:
-            result["status"] = "success"
-        return result
-
-    except httpx.RequestError as exc:
-        logger.error(f"Network error | sector={sector_name} | {exc}")
-        result["error"] = f"Network connection failed: {exc}"
-        return result
-
-    except Exception as exc:
-        logger.exception(f"Unexpected error fetching sector data | sector={sector_name}")
-        result["error"] = f"An unexpected error occurred: {exc}"
-        return result
+    # Call Cloudinary directly via the shared service (bypass local API server)
+    pdf_result = get_pdf_content(sector_name)
+    
+    if pdf_result["status"] == "success":
+        result["data"] = pdf_result
+        result["status"] = "success"
+    else:
+        result["error"] = pdf_result["error"]
+    
+    return result
