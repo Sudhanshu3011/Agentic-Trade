@@ -8,9 +8,15 @@ from langchain_core.runnables import (
 from langchain_core.output_parsers import StrOutputParser
 
 from agents.base_agent import BaseAgent
+from core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _extract_market_section(data: dict, key: str):
+    """
+    Helper function to extract specific market data sections for the Market Analyst stage.
+    """
 
     section = data.get("market_data", {}).get("data", {}).get(key, {})
 
@@ -21,6 +27,9 @@ def _extract_market_section(data: dict, key: str):
 
 
 def _build_messages(data: dict) -> dict:
+    """
+    Format the input for the Market Analyst stage. Combines all relevant market data into a single message.
+    """
 
     content = f"""
 Analyze the Indian and Global market metrics:
@@ -52,6 +61,7 @@ class MarketAnalyst(BaseAgent):
 
         super().__init__()
 
+        # Define the success and error chains for the Market Analyst
         success_chain = (
             RunnableLambda(_build_messages) | self.prompt | self.llm | StrOutputParser()
         )
@@ -63,7 +73,8 @@ class MarketAnalyst(BaseAgent):
             )
         )
 
-        branch = RunnableBranch(
+        # Apply branching logic to handle success and failure scenarios based on the presence of market data
+        self.chain = RunnableBranch(
             (
                 lambda x: x.get("market_data", {}).get("status") == "success",
                 success_chain,
@@ -71,10 +82,12 @@ class MarketAnalyst(BaseAgent):
             error_chain,
         )
 
-        self.chain = branch
-
     def run(self, state) -> str:
+        """Invoke the Market Analyst chain with the relevant portion of the state."""
 
+        logger.info(
+            f"Running market analyst pipeline | ticker={state['ticker_of_company']}"
+        )
         return self.chain.invoke(
             {
                 "ticker": state["ticker_of_company"],

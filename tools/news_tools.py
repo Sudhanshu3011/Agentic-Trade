@@ -76,7 +76,6 @@ def get_company_news(ticker: str, prefetched_news: list | None = None) -> dict:
 
     try:
 
-        # Ensure variable always exists
         yf_news = prefetched_news or []
 
         if not yf_news:

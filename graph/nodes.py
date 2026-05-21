@@ -22,9 +22,9 @@ sector_analyst = SectorAnalyst()
 
 @handle_node_errors("data_prefetch")
 def run_data_prefetch(state: AgentState) -> dict:
-    bundle = prefetch_ticker_bundle(state["ticker_of_company"])
-    bundle = process_prefetch_result(bundle)
-    return {"data_bundle": bundle}
+    raw_bundle = prefetch_ticker_bundle(state["ticker_of_company"])
+    processed_bundle = process_prefetch_result(raw_bundle)
+    return {"data_bundle": processed_bundle}
 
 
 @handle_node_errors("market_analyst")
@@ -35,9 +35,6 @@ def run_market_analyst(state: AgentState) -> dict:
 
 @handle_node_errors("fundamental_analyst")
 def run_fundamental_analyst(state: AgentState) -> dict:
-    time.sleep(
-        1.5
-    )  # intentional delay to reduce likelihood of yfinance.info 401 errors
     result = fundamental_analyst.run(state)
     return {"fundamental_analyst_report": result}
 

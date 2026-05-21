@@ -9,27 +9,27 @@ import json
 def process_prefetch_result(raw_data: dict) -> dict:
     """
     Process the raw data fetched in the prefetch step to extract relevant information
-    for each analyst. This function can be expanded to include more complex processing
-    logic as needed.
+    for each analyst. Make the raw_bundlle to the structired format expected by the analysts.
+    This function serves as a bridge between the raw data collection and the structured analysis stages.
     """
-    print(raw_data)
-    processed_data = {}
+    processed_bundle = {}
 
-    processed_data["technical_data"] = process_technical_data(raw_data)
-    processed_data["fundamental_data"] = process_fundamental_data(raw_data)
-    processed_data["market_data"] = process_market_data(
-        raw_data.get("ticker"), prefetched_indices=raw_data.get("market_indices", {})
+    processed_bundle["technical_data"] = process_technical_data(raw_data)
+
+    processed_bundle["fundamental_data"] = process_fundamental_data(raw_data)
+
+    processed_bundle["market_data"] = process_market_data(
+        ticker=raw_data.get("ticker"),
+        prefetched_indices=raw_data.get("market_indices", {}),
     )
-    processed_data["news_data"] = {
+
+    processed_bundle["news_data"] = {
         "company_news": get_company_news(
-            raw_data.get("ticker"), prefetched_news=raw_data.get("news", [])
+            ticker=raw_data.get("ticker"), prefetched_news=raw_data.get("news", [])
         )
     }
-    processed_data["sector_data"] = get_company_sector(
-        raw_data.get("ticker", ""), prefetched_info=raw_data.get("info", {})
+    processed_bundle["sector_data"] = get_company_sector(
+        ticker=raw_data.get("ticker", ""), prefetched_info=raw_data.get("info", {})
     )
 
-    with open("processed_data.json", "w") as f:
-        json.dump(processed_data, f, indent=4)
-
-    return processed_data
+    return processed_bundle

@@ -8,9 +8,15 @@ from langchain_core.runnables import (
 from langchain_core.output_parsers import StrOutputParser
 
 from agents.base_agent import BaseAgent
+from core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _build_messages(data: dict) -> dict:
+    """
+    Format the input for the Technical Analyst stage. Combines all relevant technical data into a single message.
+    """
 
     tech = data.get("technical_data", {})
 
@@ -56,6 +62,7 @@ class TechnicalAnalyst(BaseAgent):
 
         super().__init__()
 
+        # Define the success and error chains for the Technical Analyst
         success_chain = (
             RunnableLambda(_build_messages) | self.prompt | self.llm | StrOutputParser()
         )
@@ -64,7 +71,8 @@ class TechnicalAnalyst(BaseAgent):
             lambda x: f"Failed to fetch technical data for {x['ticker']}: {x['error']}"
         )
 
-        branch = RunnableBranch(
+        # Apply a branching logic to handle cases where technical data is successfully fetched vs when it fails
+        self.chain = RunnableBranch(
             (
                 lambda x: x.get("technical_data", {}).get("status") == "success",
                 success_chain,
@@ -72,9 +80,12 @@ class TechnicalAnalyst(BaseAgent):
             error_chain,
         )
 
-        self.chain = branch
-
     def run(self, state):
+        """Invoke the Technical Analyst chain with the relevant portion of the state."""
+
+        logger.info(
+            f"Running technical analyst pipeline | ticker={state['ticker_of_company']}"
+        )
 
         return self.chain.invoke(
             {

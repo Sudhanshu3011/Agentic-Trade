@@ -24,7 +24,7 @@ TICKERS: dict[str, str] = {
 }
 
 
-def process_market_data(x, prefetched_indices: dict | None = None):
+def process_market_data(ticker: str, prefetched_indices: dict | None = None):
 
     processed = {}
     errors = []
@@ -57,66 +57,6 @@ def process_market_data(x, prefetched_indices: dict | None = None):
         return {"status": "failed", "error": "\n".join(errors), "data": {}}
 
     return {"status": "success", "error": None, "data": processed}
-
-
-@with_retry(retries=3, delay=2.0, backoff=2.0)
-def fetch_df(ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
-    """
-    Fetch historical market data for a given ticker ticker.
-    """
-    logger.debug(f"Downloading OHLCV data | ticker={ticker}")
-
-    result = {
-        "data": None,
-        "status": "failed",
-        "error": None,
-        "ticker": ticker,
-        "source": "yfinance",
-    }
-
-    try:
-        with yf_call("fetch_df"):
-            df = yf.download(
-                ticker,
-                period=period,
-                interval=interval,
-                auto_adjust=True,
-                progress=False,
-            )
-    except YFinance401Error as e:
-        logger.error(f"401 on '{e.caller}' — Yahoo Finance rejected the request")
-        result["error"] = f"401 Unauthorized from Yahoo Finance in '{e.caller}'"
-        return result
-    except Exception as exc:
-        logger.exception(f"yfinance.download failed | ticker={ticker} | {exc}")
-        result["error"] = f"download_failed: {exc}"
-        return result
-    df = df.dropna()
-    if df is None or df.empty:
-        logger.warning(f"Empty DataFrame | ticker={ticker}")
-        result["error"] = "empty_dataframe"
-        return result
-
-    try:
-        df.index = pd.to_datetime(df.index).tz_localize(None)
-        df.sort_index(inplace=True)
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-    except Exception as exc:
-        logger.exception(f"Normalization failed | ticker={ticker} | {exc}")
-        result["error"] = f"parse_error: {exc}"
-        result["data"] = df
-        result["status"] = "partial"
-        return result
-
-    logger.info(f"Fetched {len(df)} bars | ticker={ticker}")
-
-    result["data"] = df
-    result["status"] = "success"
-
-    return result
 
 
 def extract_metrics(
@@ -190,6 +130,67 @@ def extract_metrics(
         return metrics
 
 
+# The following code is for testing and demonstration purposes only
+@with_retry(retries=3, delay=2.0, backoff=2.0)
+def fetch_df(ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
+    """
+    Fetch historical market data for a given ticker ticker.
+    """
+    logger.debug(f"Downloading OHLCV data | ticker={ticker}")
+
+    result = {
+        "data": None,
+        "status": "failed",
+        "error": None,
+        "ticker": ticker,
+        "source": "yfinance",
+    }
+
+    try:
+        with yf_call("fetch_df"):
+            df = yf.download(
+                ticker,
+                period=period,
+                interval=interval,
+                auto_adjust=True,
+                progress=False,
+            )
+    except YFinance401Error as e:
+        logger.error(f"401 on '{e.caller}' — Yahoo Finance rejected the request")
+        result["error"] = f"401 Unauthorized from Yahoo Finance in '{e.caller}'"
+        return result
+    except Exception as exc:
+        logger.exception(f"yfinance.download failed | ticker={ticker} | {exc}")
+        result["error"] = f"download_failed: {exc}"
+        return result
+    df = df.dropna()
+    if df is None or df.empty:
+        logger.warning(f"Empty DataFrame | ticker={ticker}")
+        result["error"] = "empty_dataframe"
+        return result
+
+    try:
+        df.index = pd.to_datetime(df.index).tz_localize(None)
+        df.sort_index(inplace=True)
+
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+    except Exception as exc:
+        logger.exception(f"Normalization failed | ticker={ticker} | {exc}")
+        result["error"] = f"parse_error: {exc}"
+        result["data"] = df
+        result["status"] = "partial"
+        return result
+
+    logger.info(f"Fetched {len(df)} bars | ticker={ticker}")
+
+    result["data"] = df
+    result["status"] = "success"
+
+    return result
+
+
 if __name__ == "__main__":
     print("Starting market pipeline")
 
@@ -221,11 +222,12 @@ if __name__ == "__main__":
             status = fetch_result.get("status")
             df = fetch_result.get("data")
 
-            _, metrics = extract_metrics(ticker, status, df)
+            metrics = extract_metrics(ticker, status, df)
 
             results[name] = {"fetch_status": status, "metrics": metrics}
 
     print("Market pipeline completed")
+    print(json.dumps(results, indent=2))
 
     with open("market_snapshot.json", "w") as f:
         f.write(json.dumps(results, indent=2))

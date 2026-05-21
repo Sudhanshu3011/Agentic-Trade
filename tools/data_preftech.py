@@ -17,6 +17,7 @@ _MARKET_TICKERS: dict[str, str] = {
 }
 
 
+# This module is responsible for the initial data burst from yfinance — all company data + market indices in one go.
 def _normalize_df(df: pd.DataFrame | None) -> pd.DataFrame | None:
     """Shared OHLCV cleanup — same logic your fetch_df already does."""
     if df is None or df.empty:

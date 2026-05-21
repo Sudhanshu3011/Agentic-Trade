@@ -31,11 +31,6 @@ def get_company_sector(
     }
 
     try:
-        # stock = yf.Ticker(ticker)
-        # with yf_call("get_company_sector"):
-        #     info = stock.info
-
-        # yfinance may return None or a dict containing error info
         if prefetched_info:
             info = prefetched_info
         if (

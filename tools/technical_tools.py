@@ -19,6 +19,11 @@ warnings.filterwarnings("ignore")
 
 
 def process_technical_data(x):
+    """
+    Process raw OHLCV data into a structured format with various technical indicators.
+    It provides the evidance for the TechnicalAnalyst to make informed assessments on price action,
+    momentum, volatility, and volume dynamics.
+    """
 
     ticker = x.get("ticker")
     prefetched_ohlcv = x.get("ohlcv")
@@ -44,72 +49,6 @@ def process_technical_data(x):
         "mfi": compute_mfi(df),
         "volume": compute_volume(df),
     }
-
-
-@with_retry(retries=3, delay=2.0, backoff=2.0)
-def fetch_df(ticker: str, period: str = "1y", interval: str = "1d") -> dict[str, Any]:
-    """Fetch historical OHLCV data safely for agent pipelines."""
-
-    logger.debug(f"Downloading OHLCV data | ticker={ticker}")
-
-    result = {
-        "data": None,
-        "status": "failed",
-        "error": None,
-        "ticker": ticker,
-        "source": "yfinance",
-    }
-    try:
-        with yf_call("fetch_df"):
-            df = yf.download(
-                ticker,
-                period=period,
-                interval=interval,
-                auto_adjust=True,
-                progress=False,
-            )
-    except YFinance401Error as e:
-        result["error"] = f"401_unauthorized | caller='{e.caller}'"
-        return result
-    except Exception as exc:
-        logger.exception(f"yfinance.download failed | ticker={ticker} | {exc}")
-        result["error"] = f"download_failed: {exc}"
-        return result
-
-    # Initial empty check
-    if df is None or df.empty:
-        logger.warning(f"Empty DataFrame | ticker={ticker}")
-        result["error"] = "empty_dataframe"
-        return result
-
-    try:
-        # Remove rows with NaN values
-        df = df.dropna(how="any")
-
-        # Check again after cleaning
-        if df.empty:
-            logger.warning(f"DataFrame empty after dropna | ticker={ticker}")
-            result["error"] = "empty_after_dropna"
-            return result
-
-        df.index = pd.to_datetime(df.index).tz_localize(None)
-        df.sort_index(inplace=True)
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-
-    except Exception as exc:
-        logger.exception(f"Normalization failed | ticker={ticker} | {exc}")
-        result["error"] = f"parse_error: {exc}"
-        result["data"] = df
-        result["status"] = "partial"
-        return result
-
-    logger.info(f"Fetched {len(df)} bars | ticker={ticker}")
-
-    result["data"] = df
-    result["status"] = "success"
-    return result
 
 
 def compute_moving_averages(df: pd.DataFrame) -> dict[str, Any]:
@@ -874,6 +813,73 @@ def compute_price_levels(df: pd.DataFrame) -> dict[str, Any]:
         result["error"] = str(exc)
         result["status"] = "failed"
         return result
+
+
+# The following code is for testing and demonstration purposes only
+@with_retry(retries=3, delay=2.0, backoff=2.0)
+def fetch_df(ticker: str, period: str = "1y", interval: str = "1d") -> dict[str, Any]:
+    """Fetch historical OHLCV data safely for agent pipelines."""
+
+    logger.debug(f"Downloading OHLCV data | ticker={ticker}")
+
+    result = {
+        "data": None,
+        "status": "failed",
+        "error": None,
+        "ticker": ticker,
+        "source": "yfinance",
+    }
+    try:
+        with yf_call("fetch_df"):
+            df = yf.download(
+                ticker,
+                period=period,
+                interval=interval,
+                auto_adjust=True,
+                progress=False,
+            )
+    except YFinance401Error as e:
+        result["error"] = f"401_unauthorized | caller='{e.caller}'"
+        return result
+    except Exception as exc:
+        logger.exception(f"yfinance.download failed | ticker={ticker} | {exc}")
+        result["error"] = f"download_failed: {exc}"
+        return result
+
+    # Initial empty check
+    if df is None or df.empty:
+        logger.warning(f"Empty DataFrame | ticker={ticker}")
+        result["error"] = "empty_dataframe"
+        return result
+
+    try:
+        # Remove rows with NaN values
+        df = df.dropna(how="any")
+
+        # Check again after cleaning
+        if df.empty:
+            logger.warning(f"DataFrame empty after dropna | ticker={ticker}")
+            result["error"] = "empty_after_dropna"
+            return result
+
+        df.index = pd.to_datetime(df.index).tz_localize(None)
+        df.sort_index(inplace=True)
+
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+
+    except Exception as exc:
+        logger.exception(f"Normalization failed | ticker={ticker} | {exc}")
+        result["error"] = f"parse_error: {exc}"
+        result["data"] = df
+        result["status"] = "partial"
+        return result
+
+    logger.info(f"Fetched {len(df)} bars | ticker={ticker}")
+
+    result["data"] = df
+    result["status"] = "success"
+    return result
 
 
 if __name__ == "__main__":

@@ -7,9 +7,15 @@ from langchain_core.runnables import (
 from langchain_core.output_parsers import StrOutputParser
 
 from agents.base_agent import BaseAgent
+from core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _build_messages(data: dict) -> dict:
+    """
+    Format the input for the Fundamental Analyst stage. Combines all relevant financial data into a single message.
+    """
 
     fund = data.get("fundamental_data", {})
 
@@ -57,6 +63,7 @@ class FundamentalAnalyst(BaseAgent):
 
         super().__init__()
 
+        # Define the success and error chains for the Fundamental Analyst
         success_chain = (
             RunnableLambda(_build_messages) | self.prompt | self.llm | StrOutputParser()
         )
@@ -66,7 +73,8 @@ class FundamentalAnalyst(BaseAgent):
             f"{x['ticker']}: {x['error']}"
         )
 
-        branch = RunnableBranch(
+        # Apply branching logic to handle success and failure scenarios based on the presence of fundamental data
+        self.chain = RunnableBranch(
             (
                 lambda x: (x.get("fundamental_data") or {}).get("status") == "success",
                 success_chain,
@@ -74,10 +82,12 @@ class FundamentalAnalyst(BaseAgent):
             error_chain,
         )
 
-        self.chain = branch
-
     def run(self, state):
+        """Invoke the Fundamental Analyst chain with the relevant portion of the state."""
 
+        logger.info(
+            f"Running fundamental analyst pipeline | ticker={state['ticker_of_company']}"
+        )
         return self.chain.invoke(
             {
                 "ticker": state["ticker_of_company"],

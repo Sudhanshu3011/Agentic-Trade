@@ -2,14 +2,21 @@ import json
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableParallel, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
+
 from agents.base_agent import BaseAgent
 from tools.news_tools import (
     get_indian_market_news,
     get_global_market_news,
 )
+from core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _build_messages(data: dict) -> dict:
+    """
+    Format the input for the News Analyst stage. Combines all relevant news data into a single message.
+    """
     content = f"""
 Analyze the news sentiment for {data['ticker']}.
 
@@ -32,6 +39,7 @@ class NewsAnalyst(BaseAgent):
     def __init__(self):
         super().__init__()
 
+        # Define a parallel runnable to fetch all relevant news data simultaneously
         news_fetcher = RunnableParallel(
             {
                 "ticker": RunnableLambda(lambda x: x["ticker"]),
@@ -41,6 +49,7 @@ class NewsAnalyst(BaseAgent):
             }
         )
 
+        # Define the chain to process the news data and generate the report
         self.chain = (
             news_fetcher
             | RunnableLambda(_build_messages)
@@ -50,6 +59,11 @@ class NewsAnalyst(BaseAgent):
         )
 
     def run(self, state) -> str:
+        """Invoke the News Analyst chain with the relevant portion of the state."""
+
+        logger.info(
+            f"Running news analyst pipeline | ticker={state['ticker_of_company']}"
+        )
         return self.chain.invoke(
             {
                 "ticker": state["ticker_of_company"],
