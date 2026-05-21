@@ -1,4 +1,6 @@
 from graph.state import AgentState
+from tools.data_preftech import prefetch_ticker_bundle
+from tools.data_processor import process_prefetch_result
 from agents.analysis.market_analyst import MarketAnalyst
 from agents.analysis.news_analyst import NewsAnalyst
 from agents.analysis.sector_analyst import SectorAnalyst
@@ -18,17 +20,21 @@ news_analyst = NewsAnalyst()
 sector_analyst = SectorAnalyst()
 
 
+@handle_node_errors("data_prefetch")
+def run_data_prefetch(state: AgentState) -> dict:
+    raw_bundle = prefetch_ticker_bundle(state["ticker_of_company"])
+    processed_bundle = process_prefetch_result(raw_bundle)
+    return {"data_bundle": processed_bundle}
+
+
 @handle_node_errors("market_analyst")
 def run_market_analyst(state: AgentState) -> dict:
-    result = market_analyst.run()
+    result = market_analyst.run(state)
     return {"market_analyst_report": result}
 
 
 @handle_node_errors("fundamental_analyst")
 def run_fundamental_analyst(state: AgentState) -> dict:
-    time.sleep(
-        1.5
-    )  # intentional delay to reduce likelihood of yfinance.info 401 errors
     result = fundamental_analyst.run(state)
     return {"fundamental_analyst_report": result}
 
