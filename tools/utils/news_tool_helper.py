@@ -61,12 +61,19 @@ def _extract_news_fields(news_json):
     return extracted
 
 
-def _to_iso(date_str: str) -> str:
-    """Convert Tavily RFC 2822 date to ISO 8601 — same format as yfinance pubDate."""
+def _to_iso(date_str: str | None) -> str | None:
+    """Convert Tavily RFC 2822 date to ISO 8601."""
+
+    # Handle empty/invalid values first
+    if not date_str or str(date_str).strip().upper() in {"N/A", "NA", "NONE", "NULL"}:
+        return None
+
     try:
-        return parsedate_to_datetime(date_str).strftime("%Y-%m-%dT%H:%M:%SZ")
+        dt = parsedate_to_datetime(date_str)
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
     except Exception:
-        logger.exception("Tavily _to_iso format is confilcting.")
+        logger.warning("Invalid Tavily date format received: %s", date_str)
         return None
 
 
