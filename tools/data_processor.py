@@ -35,4 +35,4 @@ def process_prefetch_result(raw_data: dict) -> dict:
     # with open("data.json",'w+') as f:
     #     json.dump(processed_bundle,f,indent=2)
 
-    # return processed_bundle
+    return processed_bundle
