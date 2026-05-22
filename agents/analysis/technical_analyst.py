@@ -71,7 +71,6 @@ class TechnicalAnalyst(BaseAgent):
             f"{x.get('ticker', 'N/A')}: {x.get('error', 'Unknown error')}"
         )
 
-
         # Apply a branching logic to handle cases where technical data is successfully fetched vs when it fails
         self.chain = RunnableBranch(
             (
