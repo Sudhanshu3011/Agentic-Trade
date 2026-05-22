@@ -21,9 +21,8 @@ _cache_lock = threading.Lock()
 _CACHE_TTL_SEC = 86_400
 
 # Official NSE equity list
-NSE_LIST_URL = (
-    "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
-)
+NSE_LIST_URL = "https://nsearchives.nseindia.com/content/equities/EQUITY_L.csv"
+
 
 # Load NSE symbols
 def _load_nse_symbols() -> set[str]:
@@ -35,9 +34,7 @@ def _load_nse_symbols() -> set[str]:
         TCS
     """
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0"
-        }
+        headers = {"User-Agent": "Mozilla/5.0"}
 
         resp = requests.get(
             NSE_LIST_URL,
@@ -49,21 +46,15 @@ def _load_nse_symbols() -> set[str]:
 
         df = pd.read_csv(StringIO(resp.text))
 
-        symbols = set(
-            df["SYMBOL"]
-            .astype(str)
-            .str.strip()
-            .str.upper()
-        )
+        symbols = set(df["SYMBOL"].astype(str).str.strip().str.upper())
 
         logger.info(f"NSE symbols loaded: {len(symbols)}")
 
         return symbols
 
     except Exception as exc:
-        logger.warning(f"NSE symbol fetch failed: {exc}")
+        logger.exception(f"NSE symbol fetch failed: {exc}")
         return set()
-
 
 
 # Refresh cache
@@ -75,10 +66,7 @@ def _refresh_cache_if_stale() -> None:
 
         age = time.time() - _cache["loaded_at"]
 
-        if (
-            age < _CACHE_TTL_SEC
-            and _cache["nse_symbols"]
-        ):
+        if age < _CACHE_TTL_SEC and _cache["nse_symbols"]:
             return
 
         logger.info("Refreshing ticker symbol cache...")
@@ -87,10 +75,7 @@ def _refresh_cache_if_stale() -> None:
 
         _cache["loaded_at"] = time.time()
 
-        logger.info(
-            "Ticker cache refreshed | "
-            f"NSE={len(_cache['nse_symbols'])}"
-        )
+        logger.info("Ticker cache refreshed | " f"NSE={len(_cache['nse_symbols'])}")
 
 
 # Format validation
@@ -117,7 +102,7 @@ def validate_ticker_format(
     ticker = ticker.strip().upper()
 
     if not _FORMAT_RE.match(ticker):
-
+        logger.warning(f"Ticker format validation failed | ticker={ticker}")
         return (
             False,
             (
@@ -127,7 +112,6 @@ def validate_ticker_format(
         )
 
     return True, None
-
 
 
 # Existence validation
@@ -150,17 +134,12 @@ def validate_ticker_exists(
 
         if not _cache["nse_symbols"]:
 
-            logger.warning(
-                "NSE cache unavailable"
-            )
+            logger.warning("NSE cache unavailable")
 
-            return (
-                False,
-                "Ticker validation service temporarily unavailable."
-            )
+            return (False, "Ticker validation service temporarily unavailable.")
 
         if symbol not in _cache["nse_symbols"]:
-
+            logger.warning(f"NSE Ticker not found | ticker={ticker}")
             return (
                 False,
                 (

@@ -14,9 +14,11 @@ from api.validators import (
     validate_ticker_exists,
     _refresh_cache_if_stale,
 )
-
+from core.logging import get_logger
 from graph.builder import build_graph
+import asyncio
 
+logger = get_logger(__name__)
 
 # Build graph once at startup
 graph = build_graph()
@@ -74,7 +76,6 @@ class AnalyzeResponse(BaseModel):
     status: str
 
 
-
 # Routes
 @app.get("/health")
 def health_check():
@@ -100,9 +101,7 @@ async def analyze(request: Request, body: AnalyzeRequest):
             detail={
                 "error": "invalid_ticker_format",
                 "message": format_error,
-                "hint": (
-                    "Use NSE format like 'RELIANCE.NS'"
-                ),
+                "hint": ("Use NSE format like 'RELIANCE.NS'"),
             },
         )
 
@@ -123,27 +122,17 @@ async def analyze(request: Request, body: AnalyzeRequest):
 
     try:
 
-        final_state = graph.invoke({
-            "ticker_of_company": ticker
-        })
+        final_state = await asyncio.to_thread(
+            graph.invoke, {"ticker_of_company": ticker}
+        )
 
         return AnalyzeResponse(
             ticker=ticker,
-            news_report=final_state.get(
-                "news_analyst_report", ""
-            ),
-            technical_report=final_state.get(
-                "technical_analyst_report", ""
-            ),
-            fundamental_report=final_state.get(
-                "fundamental_analyst_report", ""
-            ),
-            market_report=final_state.get(
-                "market_analyst_report", ""
-            ),
-            sector_report=final_state.get(
-                "sector_analyst_report", ""
-            ),
+            news_report=final_state.get("news_analyst_report", ""),
+            technical_report=final_state.get("technical_analyst_report", ""),
+            fundamental_report=final_state.get("fundamental_analyst_report", ""),
+            market_report=final_state.get("market_analyst_report", ""),
+            sector_report=final_state.get("sector_analyst_report", ""),
             status="success",
         )
 
