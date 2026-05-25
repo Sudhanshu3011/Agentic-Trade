@@ -74,6 +74,7 @@ class AnalyzeResponse(BaseModel):
     market_report: str
     sector_report: str
     status: str
+    charts_data: dict | None = None
 
 
 # Routes
@@ -140,6 +141,20 @@ async def analyze(request: Request, body: AnalyzeRequest, groq_api_key: str = He
         )
         logger.info(f"Graph execution completed | ticker={ticker}")
 
+        data_bundle = final_state.get("data_bundle", {})
+        technical_data = data_bundle.get("technical_data", {})
+        fundamental_data = data_bundle.get("fundamental_data", {})
+
+        charts_data = {
+            "technical_history": technical_data.get("history", []),
+            "financials_history": {
+                "income_stmt": fundamental_data.get("income_stmt", {}).get("income_statement", {}),
+                "balance_sheet": fundamental_data.get("balance_sheet", {}).get("balance_sheet", {}),
+                "cash_flow": fundamental_data.get("cash_flow", {}).get("cash_flow", {}),
+                "ratios": fundamental_data.get("fundamentals", {}).get("fundamentals", {}),
+            }
+        }
+
         return AnalyzeResponse(
             ticker=ticker,
             news_report=final_state.get("news_analyst_report", ""),
@@ -148,6 +163,7 @@ async def analyze(request: Request, body: AnalyzeRequest, groq_api_key: str = He
             market_report=final_state.get("market_analyst_report", ""),
             sector_report=final_state.get("sector_analyst_report", ""),
             status="success",
+            charts_data=charts_data,
         )
 
     except Exception as e:

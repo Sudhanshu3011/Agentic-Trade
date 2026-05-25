@@ -18,6 +18,51 @@ logger = get_logger(__name__)
 warnings.filterwarnings("ignore")
 
 
+def compute_history(df: pd.DataFrame, limit: int = 120) -> list[dict]:
+    """
+    Compute a list of clean dictionaries for the last `limit` days
+    containing date, close, ma50, ma200, bb_upper, bb_lower, bb_mid, rsi, volume.
+    """
+    try:
+        # Clone DataFrame so we don't mutate the raw input data
+        df_calc = df.copy()
+        
+        # Calculate moving averages
+        df_calc["ma50"] = df_calc["Close"].rolling(50).mean()
+        df_calc["ma200"] = df_calc["Close"].rolling(200).mean()
+        
+        # Calculate Bollinger Bands
+        bb = ta.volatility.BollingerBands(df_calc["Close"])
+        df_calc["bb_upper"] = bb.bollinger_hband()
+        df_calc["bb_lower"] = bb.bollinger_lband()
+        df_calc["bb_mid"] = bb.bollinger_mavg()
+        
+        # Calculate RSI
+        df_calc["rsi"] = ta.momentum.RSIIndicator(df_calc["Close"]).rsi()
+        
+        # Select last `limit` periods
+        df_tail = df_calc.tail(limit)
+        
+        history = []
+        for idx, row in df_tail.iterrows():
+            date_str = idx.strftime("%Y-%m-%d")
+            history.append({
+                "date": date_str,
+                "close": float(row["Close"]) if not pd.isna(row["Close"]) else None,
+                "ma50": float(row["ma50"]) if not pd.isna(row["ma50"]) else None,
+                "ma200": float(row["ma200"]) if not pd.isna(row["ma200"]) else None,
+                "bb_upper": float(row["bb_upper"]) if not pd.isna(row["bb_upper"]) else None,
+                "bb_lower": float(row["bb_lower"]) if not pd.isna(row["bb_lower"]) else None,
+                "bb_mid": float(row["bb_mid"]) if not pd.isna(row["bb_mid"]) else None,
+                "rsi": float(row["rsi"]) if not pd.isna(row["rsi"]) else None,
+                "volume": int(row["Volume"]) if not pd.isna(row["Volume"]) else None,
+            })
+        return history
+    except Exception as exc:
+        logger.warning(f"Failed to compute history charts data: {exc}")
+        return []
+
+
 def process_technical_data(x):
     """
     Process raw OHLCV data into a structured format with various technical indicators.
@@ -48,6 +93,7 @@ def process_technical_data(x):
         "vwma": compute_vwma(df),
         "mfi": compute_mfi(df),
         "volume": compute_volume(df),
+        "history": compute_history(df),
     }
 
 

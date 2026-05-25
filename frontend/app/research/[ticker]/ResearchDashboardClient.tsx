@@ -13,7 +13,9 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { Sidebar, type ViewKey } from "@/components/Sidebar";
 import { ReportView } from "@/components/ReportView";
 import { DebateRoom } from "@/components/DebateRoom";
-import { VerdictBadge, decisionColor } from "@/components/VerdictBadge";
+import { decisionColor } from "@/components/VerdictBadge";
+import { TechnicalChart } from "@/components/TechnicalChart";
+import { FundamentalChart } from "@/components/FundamentalChart";
 
 export default function ResearchDashboardClient({ ticker }: { ticker: string }) {
   const router = useRouter();
@@ -142,7 +144,9 @@ function ViewSwitch({
           status={data.status}
           content={data.technical_report}
           filenameBase={`${t}_technical_report`}
-        />
+        >
+          <TechnicalChart data={data.charts_data?.technical_history} />
+        </ReportView>
       );
     case "fundamental":
       return (
@@ -152,7 +156,9 @@ function ViewSwitch({
           status={data.status}
           content={data.fundamental_report}
           filenameBase={`${t}_fundamental_report`}
-        />
+        >
+          <FundamentalChart data={data.charts_data?.financials_history} />
+        </ReportView>
       );
     case "market":
       return (

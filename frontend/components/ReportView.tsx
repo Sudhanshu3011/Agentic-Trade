@@ -9,6 +9,7 @@ export function ReportView({
   content,
   accent,
   filenameBase,
+  children,
 }: {
   title: string;
   ticker: string;
@@ -16,6 +17,7 @@ export function ReportView({
   content: string;
   accent?: string;
   filenameBase: string;
+  children?: React.ReactNode;
 }) {
   return (
     <div className="mx-auto max-w-[920px]">
@@ -41,13 +43,15 @@ export function ReportView({
         </div>
       </div>
       <div className="h-px w-full bg-[var(--border)]" />
-      <p className="mt-2 font-mono text-[12px] text-[var(--muted-foreground)]">
+      <p className="mt-2 font-mono text-[12px] text-[var(--muted-foreground)] mb-6">
         {ticker.split(".")[0]} · Report generated · {status}
       </p>
 
-      <div className="mt-6 border border-[var(--border)] bg-white p-8 rounded-xl shadow-sm">
+      <div className="mt-6 border border-[var(--border)] bg-white p-8 rounded-xl shadow-sm mb-6">
         <Markdown content={content} />
       </div>
+
+      {children}
     </div>
   );
 }

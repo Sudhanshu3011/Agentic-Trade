@@ -16,6 +16,44 @@ export interface AnalyseResponse {
   };
   research_verdict: { decision: Decision; rationale: string };
   status: string;
+  charts_data?: {
+    technical_history: Array<{
+      date: string;
+      close: number | null;
+      ma50: number | null;
+      ma200: number | null;
+      bb_upper: number | null;
+      bb_lower: number | null;
+      bb_mid: number | null;
+      rsi: number | null;
+      volume: number | null;
+    }>;
+    financials_history: {
+      income_stmt: {
+        revenue?: Record<string, number | null>;
+        ebitda?: Record<string, number | null>;
+        net_income?: Record<string, number | null>;
+        eps_diluted?: Record<string, number | null>;
+      };
+      balance_sheet: {
+        cash?: Record<string, number | null>;
+        total_liabilities?: Record<string, number | null>;
+        total_debt?: Record<string, number | null>;
+        shareholders_equity?: Record<string, number | null>;
+      };
+      cash_flow: {
+        operating_cash_flow?: Record<string, number | null>;
+        free_cash_flow?: Record<string, number | null>;
+      };
+      ratios: {
+        net_margin_pct?: Record<string, number | null>;
+        roe_pct?: Record<string, number | null>;
+        roce_pct?: Record<string, number | null>;
+        debt_to_equity?: Record<string, number | null>;
+        interest_coverage?: Record<string, number | null>;
+      };
+    };
+  };
 }
 
 const DEFAULT_DEBATE = {
@@ -84,6 +122,7 @@ export async function analyseTicker(ticker: string, groqApiKey: string): Promise
     investment_debate: rawData.investment_debate || DEFAULT_DEBATE,
     research_verdict: rawData.research_verdict || DEFAULT_VERDICT,
     status: rawData.status || "success",
+    charts_data: rawData.charts_data,
   };
 
   return data;
