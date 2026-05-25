@@ -1,13 +1,29 @@
-# tools/data_prefetch.py
-import pandas as pd
+import threading
 import yfinance as yf
-from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from core.yf_context import yf_call, YFinance401Error
+from tools.utils.data_prefetch_helper import (_normalize_df, _get_cached , _set_cached)
 from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Market indices are fixed — same across every pipeline run
+# ── Global serialization gate ────────────────────────────────────────────────
+# yfinance internally shares session/cookie/crumb state.
+# Concurrent access from multiple FastAPI requests can corrupt that state
+# and trigger intermittent "Invalid Crumb" / 401 errors.
+#
+# This lock guarantees:
+# ONE request owns yfinance completely during the prefetch lifecycle.
+#
+# Important:
+# - We intentionally serialize the ENTIRE pipeline.
+# - ThreadPoolExecutor was removed because it added thread overhead
+#   while the semaphore already forced sequential execution.
+#
+_YF_SEMAPHORE = threading.Semaphore(1)
+
+# ── Fixed market index tickers ───────────────────────────────────────────────
+
 _MARKET_TICKERS: dict[str, str] = {
     "GSPC": "^GSPC",
     "VIX": "^VIX",
@@ -16,146 +32,269 @@ _MARKET_TICKERS: dict[str, str] = {
     "IXIC": "^IXIC",
 }
 
-
-# This module is responsible for the initial data burst from yfinance — all company data + market indices in one go.
-def _normalize_df(df: pd.DataFrame | None) -> pd.DataFrame | None:
-    """Shared OHLCV cleanup — same logic your fetch_df already does."""
-    if df is None or df.empty:
-        return None
-    df = df.dropna(how="any")
-    if df.empty:
-        return None
-    df.index = pd.to_datetime(df.index).tz_localize(None)
-    df.sort_index(inplace=True)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-    return df
+# ── Main prefetch function ───────────────────────────────────────────────────
 
 
 def prefetch_ticker_bundle(ticker: str) -> dict:
     """
-    Fetch ALL yfinance data for one company ticker + all market indices
-    in a single controlled burst — before any agent runs.
+    Fetch ALL yfinance data needed by every analyst in one controlled pass.
 
-    Returns a bundle dict consumed directly by process_* functions.
-    Bundle keys mirror what ticker_data() returns so process_fundamental_data
-    can use it with zero structural changes.
+    Data fetched
+    ------------
+    Company:
+        - ohlcv
+        - financials
+        - balance_sheet
+        - cash_flow
+        - info
+        - major_holders
+        - news
+
+    Market:
+        - GSPC
+        - VIX
+        - NSEI
+        - BSESN
+        - IXIC
+
+    Concurrency model
+    -----------------
+    FastAPI may execute multiple requests concurrently.
+
+    yfinance is NOT reliably thread-safe because it internally shares:
+        - curl_cffi session
+        - cookies
+        - Yahoo crumb tokens
+
+    Therefore:
+        - ONE global semaphore serializes ALL yfinance access.
+        - The entire prefetch lifecycle runs under one lock.
+        - No ThreadPoolExecutor is used.
+
+    Returns
+    -------
+    dict
+        {
+            "status": "success" | "invalid_ticker" | "failed"
+        }
     """
+
+    cached = _get_cached(ticker)
+    if cached:
+        logger.info("Returning cached data")
+        return cached
+    
     bundle: dict = {
         "ticker": ticker,
         "status": "success",
         "error": None,
-        # ── company data (mirrors ticker_data() return shape) ────────────
-        "ohlcv": None,  # → TechnicalAnalyst
-        "financials": None,  # → FundamentalsAnalyst
-        "balance_sheet": None,  # → FundamentalsAnalyst
-        "cash_flow": None,  # → FundamentalsAnalyst
-        "info": {},  # → FundamentalsAnalyst + SectorAnalyst
-        "major_holders": None,  # → FundamentalsAnalyst
-        "news": [],  # → NewsAnalyst
-        # ── market indices (mirrors fetch_df() return shape per key) ─────
-        "market_indices": {},  # → MarketAnalyst
+        # ── company data ──────────────────────────────────────────────
+        "ohlcv": None,
+        "financials": None,
+        "balance_sheet": None,
+        "cash_flow": None,
+        "info": {},
+        "major_holders": None,
+        "news": [],
+        # ── market data ───────────────────────────────────────────────
+        "market_indices": {},
     }
 
-    t = yf.Ticker(ticker)
+    # ── entire yfinance lifecycle serialized ─────────────────────────
 
-    # ── company fetch tasks ─────────────────────────────────────────────
-    def _ohlcv():
-        with yf_call("prefetch_ohlcv"):
-            df = yf.download(
-                ticker, period="1y", interval="1d", auto_adjust=True, progress=False
-            )
-        return _normalize_df(df)
+    with _YF_SEMAPHORE:
 
-    def _financials():
-        with yf_call("prefetch_financials"):
-            return t.financials
+        try:
 
-    def _balance_sheet():
-        with yf_call("prefetch_balance_sheet"):
-            return t.balance_sheet
+            # ── create ONE reusable ticker instance ──────────────────
+            stock = yf.Ticker(ticker)
 
-    def _cash_flow():
-        with yf_call("prefetch_cash_flow"):
-            return t.cash_flow
+            # ──────────────────────────────────────────────────────────
+            # OHLCV
+            # ──────────────────────────────────────────────────────────
 
-    def _info():
-        with yf_call("prefetch_info"):
-            raw = t.info
-        if not isinstance(raw, dict):
-            return {}
-        return {
-            k: v
-            for k, v in raw.items()
-            if v not in (None, "None", "null", "Null", "", [], {})
-        }
-
-    def _holders():
-        with yf_call("prefetch_holders"):
-            return t.major_holders
-
-    def _news():
-        with yf_call("prefetch_news"):
-            return t.get_news() or []
-
-    # ── market index fetch tasks ────────────────────────────────────────
-    def _market_index(name: str, sym: str):
-        with yf_call(f"prefetch_market_{name}"):
-            df = yf.download(
-                sym, period="1y", interval="1d", auto_adjust=True, progress=False
-            )
-        normalized = _normalize_df(df)
-        return name, {
-            "data": normalized,
-            "status": "success" if normalized is not None else "failed",
-            "error": None if normalized is not None else "empty_dataframe",
-            "ticker": sym,
-            "source": "yfinance",
-        }
-
-    company_tasks: dict[str, callable] = {
-        "ohlcv": _ohlcv,
-        "financials": _financials,
-        "balance_sheet": _balance_sheet,
-        "cash_flow": _cash_flow,
-        "info": _info,
-        "major_holders": _holders,
-        "news": _news,
-    }
-
-    # cap workers at 5 — avoids the 10-12 concurrent burst that triggers 401
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        company_futures = {
-            executor.submit(fn): key for key, fn in company_tasks.items()
-        }
-        market_futures = {
-            executor.submit(_market_index, name, sym): name
-            for name, sym in _MARKET_TICKERS.items()
-        }
-
-        for future in as_completed({**company_futures, **market_futures}):
-            key = company_futures.get(future) or market_futures.get(future)
             try:
-                result = future.result()
-                if future in market_futures:
-                    idx_name, idx_result = result
-                    bundle["market_indices"][idx_name] = idx_result
-                else:
-                    bundle[key] = result
+                with yf_call("prefetch_ohlcv"):
 
-            except YFinance401Error as e:
-                # one 401 means all will 401 — abort immediately
-                logger.error(f"[prefetch] 401 in '{e.caller}' — aborting pipeline")
-                bundle["status"] = "failed"
-                bundle["error"] = f"401 Unauthorized in '{e.caller}'"
-                return bundle
+                    df = yf.download(
+                        ticker,
+                        period="1y",
+                        interval="1d",
+                        auto_adjust=True,
+                        progress=False,
+                    )
 
-            except Exception as e:
-                # non-fatal: the analyst that needs this key will handle None
-                logger.warning(f"[prefetch] '{key}' fetch failed: {e}")
+                bundle["ohlcv"] = _normalize_df(df)
+
+            except Exception as exc:
+                logger.warning(f"[prefetch] 'ohlcv' fetch failed (non-fatal): {exc}")
+
+            # ──────────────────────────────────────────────────────────
+            # Financials
+            # ──────────────────────────────────────────────────────────
+
+            try:
+                with yf_call("prefetch_financials"):
+                    bundle["financials"] = stock.financials
+
+            except Exception as exc:
+                logger.warning(
+                    f"[prefetch] 'financials' fetch failed (non-fatal): {exc}"
+                )
+
+            # ──────────────────────────────────────────────────────────
+            # Balance sheet
+            # ──────────────────────────────────────────────────────────
+
+            try:
+                with yf_call("prefetch_balance_sheet"):
+                    bundle["balance_sheet"] = stock.balance_sheet
+
+            except Exception as exc:
+                logger.warning(
+                    f"[prefetch] 'balance_sheet' fetch failed (non-fatal): {exc}"
+                )
+
+            # ──────────────────────────────────────────────────────────
+            # Cash flow
+            # ──────────────────────────────────────────────────────────
+
+            try:
+                with yf_call("prefetch_cash_flow"):
+                    bundle["cash_flow"] = stock.cash_flow
+
+            except Exception as exc:
+                logger.warning(
+                    f"[prefetch] 'cash_flow' fetch failed (non-fatal): {exc}"
+                )
+
+            # ──────────────────────────────────────────────────────────
+            # Info
+            # ──────────────────────────────────────────────────────────
+
+            try:
+                with yf_call("prefetch_info"):
+                    raw_info = stock.info
+
+                if isinstance(raw_info, dict):
+
+                    bundle["info"] = {
+                        k: v
+                        for k, v in raw_info.items()
+                        if v
+                        not in (
+                            None,
+                            "None",
+                            "null",
+                            "Null",
+                            "",
+                            [],
+                            {},
+                        )
+                    }
+
+            except Exception as exc:
+                logger.warning(f"[prefetch] 'info' fetch failed (non-fatal): {exc}")
+
+            # ──────────────────────────────────────────────────────────
+            # Major holders
+            # ──────────────────────────────────────────────────────────
+
+            try:
+                with yf_call("prefetch_holders"):
+                    bundle["major_holders"] = stock.major_holders
+
+            except Exception as exc:
+                logger.warning(
+                    f"[prefetch] 'major_holders' fetch failed (non-fatal): {exc}"
+                )
+
+            # ──────────────────────────────────────────────────────────
+            # News
+            # ──────────────────────────────────────────────────────────
+
+            try:
+                with yf_call("prefetch_news"):
+                    bundle["news"] = stock.get_news() or []
+
+            except Exception as exc:
+                logger.warning(f"[prefetch] 'news' fetch failed (non-fatal): {exc}")
+
+            # ──────────────────────────────────────────────────────────
+            # Market indices
+            # ──────────────────────────────────────────────────────────
+
+            for name, sym in _MARKET_TICKERS.items():
+
+                try:
+
+                    with yf_call(f"prefetch_market_{name}"):
+
+                        idx_df = yf.download(
+                            sym,
+                            period="1y",
+                            interval="1d",
+                            auto_adjust=True,
+                            progress=False,
+                        )
+
+                    normalized = _normalize_df(idx_df)
+
+                    bundle["market_indices"][name] = {
+                        "data": normalized,
+                        "status": ("success" if normalized is not None else "failed"),
+                        "error": (
+                            None if normalized is not None else "empty_dataframe"
+                        ),
+                        "ticker": sym,
+                        "source": "yfinance",
+                    }
+
+                except Exception as exc:
+
+                    logger.warning(f"[prefetch] market '{name}' fetch failed: {exc}")
+
+        except YFinance401Error as e:
+
+            logger.error(f"[prefetch] 401 in '{e.caller}' — aborting pipeline")
+
+            bundle["status"] = "failed"
+            bundle["error"] = f"401 Unauthorized in '{e.caller}'"
+
+            return bundle
+
+    # ── validity check ───────────────────────────────────────────────────────
+
+    info = bundle.get("info", {})
+
+    has_identity = any(info.get(k) for k in ("longName", "shortName", "symbol"))
+
+    if not has_identity:
+
+        logger.warning(
+            f"[prefetch] no identity fields in info — "
+            f"ticker likely invalid | ticker={ticker}"
+        )
+
+        bundle["status"] = "invalid_ticker"
+
+        bundle["error"] = (
+            f"Ticker '{ticker}' returned no identifiable company data. "
+            "Check the symbol and exchange suffix "
+            "(e.g. RELIANCE.NS)."
+        )
+
+        return bundle
+
+    # ── success log ──────────────────────────────────────────────────────────
 
     logger.info(
-        f"[prefetch] bundle ready | ticker={ticker} | "
-        f"indices={list(bundle['market_indices'].keys())}"
+        f"[prefetch] bundle ready | ticker={ticker} "
+        f"| company={info.get('longName', 'N/A')} "
+        f"| indices={list(bundle['market_indices'].keys())}"
     )
+
+    if bundle["status"] == "success":
+        _set_cached(ticker, bundle)
+
     return bundle
