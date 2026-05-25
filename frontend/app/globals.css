@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fafafa;
+  --foreground: #18181b;
+  --border: #e4e4e7;
+  --muted-foreground: #71717a;
+  --label: #a1a1aa;
+  --buy: #22c55e;
+  --sell: #ef4444;
+  --hold: #eab308;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #09090b;
+    --foreground: #fafafa;
+    --border: #27272a;
+    --muted-foreground: #a1a1aa;
+    --label: #52525b;
+    --buy: #22c55e;
+    --sell: #ef4444;
+    --hold: #eab308;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
