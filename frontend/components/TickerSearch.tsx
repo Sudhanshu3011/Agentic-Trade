@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Fuse from "fuse.js";
 import { useRouter } from "next/navigation";
 import { analyseTicker, cacheResponse } from "@/lib/api";
+import DebateLoader from "./DebateLoader";
 
 interface Ticker {
   symbol: string;
@@ -279,17 +280,8 @@ function LoadingPanel({ ticker }: { ticker: string }) {
         <p className="font-mono text-[13px] text-[var(--muted-foreground)]">
           Initialising agents for {ticker}...
         </p>
-        <div className="mt-10 flex items-center justify-center gap-2 font-mono text-[12px]">
-          {STEPS.map((_, i) => (
-            <span
-              key={i}
-              className="inline-block h-2 w-2"
-              style={{
-                background:
-                  i === step ? "var(--foreground)" : "var(--border)",
-              }}
-            />
-          ))}
+        <div className="mt-6">
+          <DebateLoader />
         </div>
         <p className="mt-4 font-mono text-[12px] text-[var(--muted-foreground)]">
           {STEPS[step]}
