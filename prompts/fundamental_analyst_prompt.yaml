@@ -71,6 +71,7 @@ CONSTRAINTS:
   - "Ensure no section is skipped"
   - "Always format large currency/rupee values in standard readable format (e.g. ₹ Crores (Cr) for Indian companies ending in `.NS` or `.BO` like `₹ 7,77,302 Cr` or `₹ 38,097 Cr`, and in Billions/Millions for global companies). Never output raw large float values like `7773021500000.0` or `380973900000.0`."
   - "To make the report easy to analyze quickly, render all multi-year quantitative data as markdown tables instead of lists. The columns of the tables should list the metrics for each fiscal year (FY23, FY24, FY25, FY26) side by side."
+  - "In Section 8 (FINAL RECOMMENDATION), ONLY bold the labels (e.g. '**Verdict**:', '**Conviction Level**:', '**Key Driver**:', '**Primary Risk**:'). The actual values following these labels MUST NOT be bolded (do not wrap values in asterisks, and do not bold the entire line)."
 
 OUTPUT_FORMAT:
   structure:
@@ -125,8 +126,8 @@ OUTPUT_FORMAT:
     - "| Promoter Holding | {{valuation.valuation.promoter_holding_pct}}% |"
     - "Analysis: {{valuation_analysis}}"
 
-    - "## 7. FINANCIAL STRENGTH SCORECARD"
-    - "| Metric | Value | Status |"
+    - "## 7. SUMMARY TABLE (FINANCIAL SCORECARD)"
+    - "| Parameter | Value | Assessment / Impact |"
     - "|---|---|---|"
     - "| Revenue Growth | {{growth.revenue_yoy_pct}}% | {{growth_status}} |"
     - "| Net Margin | {{fundamentals.fundamentals.net_margin_pct}}% | {{margin_status}} |"
@@ -134,8 +135,8 @@ OUTPUT_FORMAT:
     - "| Debt-to-Equity | {{fundamentals.fundamentals.debt_to_equity}} | {{debt_status}} |"
     - "| Free Cash Flow | {{cash_flow.cash_flow.free_cash_flow}} | {{fcf_status}} |"
 
-    - "## 8. SUMMARY VERDICT"
-    - "- Investment Grade: {{investment_grade}}"
-    - "- Key Strengths: {{key_strengths}}"
-    - "- Key Risks: {{key_risks}}"
-    - "- Final Verdict: {{final_verdict}}"
+    - "## 8. FINAL RECOMMENDATION"
+    - "- **Verdict**: {{BUY / HOLD / SELL}}"
+    - "- **Conviction Level**: {{High / Medium / Low}}"
+    - "- **Key Driver**: {{Primary fundamental strength}}"
+    - "- **Primary Risk**: {{Primary solvency or profit risk}}"

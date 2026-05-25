@@ -64,6 +64,7 @@ CONSTRAINTS:
   - Avoid vague statements; always reference trends or percentages.
   - Keep explanation concise, analytical, and structured.
   - Analyze whether the National Stock Exchange is following NASDAQ movements or showing independent strength.
+  - "In Section 8 (FINAL RECOMMENDATION), ONLY bold the labels (e.g. '**Verdict**:', '**Conviction Level**:', '**Key Driver**:', '**Primary Risk**:'). The actual values following these labels MUST NOT be bolded (do not wrap values in asterisks, and do not bold the entire line)."
 
 OUTPUT_FORMAT:
   structure:
@@ -90,4 +91,17 @@ OUTPUT_FORMAT:
     - "- VIX interpretation based on established volatility rules"
     - "### Final Reasoning"
     - "- Justification for the selected market regime classification"
+
+    - "## 7. SUMMARY TABLE (MARKET REGIME PARAMETERS)"
+    - "| Parameter | Value / Trend | Assessment / Impact |"
+    - "|---|---|---|"
+    - "| US Indices | {{Nasdaq, S&P 500}} | {{Bullish / Bearish / Neutral}} |"
+    - "| Indian Indices | {{Nifty 50, Sensex}} | {{Bullish / Bearish / Neutral}} |"
+    - "| Volatility Index | {{VIX, India VIX}} | {{High / Low / Stable}} |"
+
+    - "## 8. FINAL RECOMMENDATION"
+    - "- **Verdict**: {{BULLISH / BEARISH / NEUTRAL}}"
+    - "- **Conviction Level**: {{High / Medium / Low}}"
+    - "- **Key Driver**: {{Primary index momentum trend}}"
+    - "- **Primary Risk**: {{Primary divergence threat}}"
 

@@ -22,6 +22,10 @@ OBJECTIVE:
   metrics_to_evaluate: Trend strength, volatility squeezes, momentum divergences, and volume confirmation.
   result: Generate a final trading recommendation (BUY/SELL/HOLD) with precise entry, stop-loss, and target coordinates.
 
+CONSTRAINTS:
+  - "Strictly utilize the provided JSON data structure for all interpretations and calculations."
+  - "In Section 8 (FINAL RECOMMENDATION), ONLY bold the labels (e.g. '**Verdict**:', '**Conviction Level**:', '**Key Driver**:', '**Primary Risk**:', '**Trade Parameters**:'). The actual values following these labels MUST NOT be bolded (do not wrap values in asterisks, and do not bold the entire line)."
+
 ANALYTICAL_INTERPRETATION_RULES:
   trend_logic:
     bullish: "Price above most moving averages with aligned upward structure"
@@ -79,16 +83,17 @@ OUTPUT_FORMAT:
     - "- 52-week High/Low (if available, else mention missing)"
     - "- % distance from high/low"
     - "- Support/Resistance (derive from Bollinger + MA zones)"
-    - "## 7. SIGNAL SUMMARY TABLE"
-    - "Indicator | Signal | Interpretation"
+    - "## 7. SUMMARY TABLE (TECHNICAL SIGNALS)"
+    - "| Parameter | Value / Signal | Assessment / Impact |"
+    - "|---|---|---|"
+    - "| Trend (Moving Averages) | {{e.g. 50-DMA, 200-DMA}} | {{Bullish / Bearish}} |"
+    - "| Momentum (RSI) | {{e.g. 58.4}} | {{Overbought / Oversold / Neutral}} |"
+    - "| Volatility (Bollinger Bands) | {{e.g. Narrowing}} | {{High Volatility / Low Volatility}} |"
+    - "| Support & Resistance | {{Entry & Stop levels}} | {{Key Zones}} |"
+
     - "## 8. FINAL RECOMMENDATION"
-    - "- BUY / SELL / HOLD: {{decision}}"
-    - "- Conviction: {{level}}"
-    - "- Note: {{If HOLD, 'Wait for price to hit Entry Zone before initiating'}}"
-    - "- Entry Zone (₹): {{Only for BUY/HOLD}}"
-    - "- Stop Loss (₹): {{Only for BUY/HOLD - Must be BELOW Entry}}"
-    - "- Target 1 / Target 2: {{Only for BUY/HOLD - Must be ABOVE Entry}}"
-    - "- Risk:Reward: {{Verified Math}}"
-    - "- If SELL: 'Action: Exit existing positions. No buy setup found.'"
-    - "- Time Horizon"
-    - "- Key Risk"
+    - "- **Verdict**: {{BUY / HOLD / SELL}}"
+    - "- **Conviction Level**: {{High / Medium / Low}}"
+    - "- **Key Driver**: {{Primary indicator setup or pattern}}"
+    - "- **Primary Risk**: {{Key breakdown support level}}"
+    - "- **Trade Parameters**: Entry Zone (₹): {{Only for BUY/HOLD}}, Stop Loss (₹): {{Only for BUY/HOLD}}, Target 1 / Target 2: {{Only for BUY/HOLD}}, Risk:Reward: {{Verified Math}}, Time Horizon: {{Time Frame}}"

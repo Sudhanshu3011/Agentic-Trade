@@ -35,6 +35,7 @@ CONSTRAINTS:
   - Every major claim MUST be supported by extracted data or statements.
   - Avoid generic summaries; focus on interpretation.
   - Maintain structural clarity and investor relevance.
+  - "In Section 8 (FINAL RECOMMENDATION), ONLY bold the labels (e.g. '**Verdict**:', '**Conviction Level**:', '**Key Driver**:', '**Primary Risk**:'). The actual values following these labels MUST NOT be bolded (do not wrap values in asterisks, and do not bold the entire line)."
 
 OUTPUT_FORMAT:
   structure:
@@ -88,12 +89,17 @@ OUTPUT_FORMAT:
     - "- Specific companies or sub-sectors best positioned to win"
     - "### Attractiveness vs Risk Profile"
     - "- Comparative assessment of reward versus potential downside"
-    - "## 8. SUMMARY TABLE"
-    - "| Factor | Insight |"
-    - "|---|---|"
-    - "| Market Size | |"
-    - "| Growth Drivers | |"
-    - "| Policy Support | |"
-    - "| Risks | |"
-    - "| Future Outlook | |"
+    - "## 7. SUMMARY TABLE (SECTOR METRICS)"
+    - "| Parameter | Key Insight | Assessment / Impact |"
+    - "|---|---|---|"
+    - "| Market Attractiveness | {{Growth Drivers}} | {{High / Medium / Low}} |"
+    - "| Policy Support | {{PLI, Subsidies}} | {{Strong / Weak / Neutral}} |"
+    - "| Regulatory Risk | {{Government checks}} | {{High / Medium / Low}} |"
+    - "| Future Outlook | {{CAGR projection}} | {{Positive / Negative / Neutral}} |"
+
+    - "## 8. FINAL RECOMMENDATION"
+    - "- **Verdict**: {{BULLISH / BEARISH / NEUTRAL}}"
+    - "- **Conviction Level**: {{High / Medium / Low}}"
+    - "- **Key Driver**: {{Primary growth catalyst or regulatory support}}"
+    - "- **Primary Risk**: {{Primary sector bottleneck or policy change}}"
 
