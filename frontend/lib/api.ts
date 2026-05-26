@@ -89,7 +89,7 @@ export async function analyseTicker(ticker: string, groqApiKey: string): Promise
   return data;
 }
 
-const KEY = (t: string) => `arbor:research:${t.toUpperCase()}`;
+const KEY = (t: string) => `artha:research:${t.toUpperCase()}`;
 
 export function cacheResponse(ticker: string, data: AnalyseResponse) {
   try {

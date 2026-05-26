@@ -54,30 +54,34 @@ export function Sidebar({
 }) {
   return (
     <aside className="flex w-60 shrink-0 flex-col overflow-y-auto border-r border-[var(--border)] bg-white">
-      <SectionLabel>ANALYSTS</SectionLabel>
-      {ANALYSTS.map((it) => (
-        <Row key={it.key} item={it} active={active === it.key} onSelect={onSelect} />
-      ))}
+      <div className="flex-1">
+        <SectionLabel>ANALYSTS</SectionLabel>
+        {ANALYSTS.map((it) => (
+          <Row key={it.key} item={it} active={active === it.key} onSelect={onSelect} />
+        ))}
 
-      <Divider />
-      <SectionLabel>DEBATE ROOM</SectionLabel>
-      {DEBATE.map((it) => (
-        <Row
-          key={it.key}
-          item={it}
-          active={active === it.key}
-          onSelect={onSelect}
-          accent={
-            it.accent
-              ? decisionColor(it.accent)
-              : it.key === "manager"
-                ? decisionColor(verdict)
-                : undefined
-          }
-        />
-      ))}
+        <Divider />
+        <SectionLabel>DEBATE ROOM</SectionLabel>
+        {DEBATE.map((it) => (
+          <Row
+            key={it.key}
+            item={it}
+            active={active === it.key}
+            onSelect={onSelect}
+            accent={
+              it.accent
+                ? decisionColor(it.accent)
+                : it.key === "manager"
+                  ? decisionColor(verdict)
+                  : undefined
+            }
+          />
+        ))}
+      </div>
 
-
+      <div className="mt-auto p-4 border-t border-[var(--border)] font-mono text-[9px] text-center tracking-wider text-[var(--muted-foreground)] opacity-75">
+        MADE BY CONCEPTWORKSX
+      </div>
     </aside>
   );
 }

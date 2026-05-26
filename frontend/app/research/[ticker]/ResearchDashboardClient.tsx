@@ -13,7 +13,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { Sidebar, type ViewKey } from "@/components/Sidebar";
 import { ReportView } from "@/components/ReportView";
 import { DebateRoom } from "@/components/DebateRoom";
-import { VerdictBadge, decisionColor } from "@/components/VerdictBadge";
+import { decisionColor } from "@/components/VerdictBadge";
 
 export default function ResearchDashboardClient({ ticker }: { ticker: string }) {
   const router = useRouter();
@@ -76,7 +76,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
       {/* Navbar */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] bg-white px-5">
         <div className="font-mono text-[13px] tracking-wider text-[var(--foreground)]">
-          ARBOR RESEARCH
+          ARTHA ANALYTICS
         </div>
         <div className="font-mono text-[13px] text-[var(--muted-foreground)]">
           {data.ticker.split(".")[0].toUpperCase()}.NS · NSE

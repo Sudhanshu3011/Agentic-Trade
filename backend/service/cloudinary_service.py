@@ -5,6 +5,9 @@ from typing import List, Optional
 
 import config.settings as settings
 from tools.utils.retry_utils import with_retry
+from core.logging import get_logger
+
+logger = get_logger(__name__)
 
 # Configuration
 cloudinary.config(
@@ -53,5 +56,5 @@ def list_pdfs() -> List[dict]:
         )
         return resources.get("resources", [])
     except Exception as e:
-        print(f"Error listing PDFs from Cloudinary: {e}")
+        logger.error(f"Error listing PDFs from Cloudinary: {e}", exc_info=True)
         return []

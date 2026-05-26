@@ -94,7 +94,7 @@ async def analyze(
     body: AnalyzeRequest,
     groq_api_key: str = Header(..., alias="Groq-API-Key"),
 ):
-    logger.info("Testing key scrubber: gsk_1234567890abcdefghijklmnopqrstuvwxyz")
+
     ticker = body.ticker.strip().upper()
     logger.info(f"Analyze request received | ticker={ticker}")
 

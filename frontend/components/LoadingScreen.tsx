@@ -20,7 +20,7 @@ export function LoadingScreen({ ticker }: { ticker: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-[480px] text-center">
-        <h1 className="font-mono text-[13px] tracked">ARBOR RESEARCH</h1>
+        <h1 className="font-mono text-[13px] tracked">ARTHA ANALYTICS</h1>
         <div className="mx-auto my-3 h-px w-full bg-[var(--border)]" />
         <p className="font-mono text-[13px] text-[var(--muted-foreground)]">
           Initialising agents for {ticker}...

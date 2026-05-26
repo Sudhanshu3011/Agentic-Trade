@@ -11,10 +11,10 @@ import "./debateLoader.css";
 
 export default function DebateLoader() {
   const icons = [
-    <TbMessageCircleCheck />,
-    <TbMessageCircleX />,
-    <TbMessageCircleBolt />,
-    <TbMessageCircleExclamation />,
+    <TbMessageCircleCheck key="check" />,
+    <TbMessageCircleX key="x" />,
+    <TbMessageCircleBolt key="bolt" />,
+    <TbMessageCircleExclamation key="excl" />,
   ];
 
   return (
