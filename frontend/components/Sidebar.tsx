@@ -60,6 +60,7 @@ export function Sidebar({
           <Row key={it.key} item={it} active={active === it.key} onSelect={onSelect} />
         ))}
 
+        {/*
         <Divider />
         <SectionLabel>DEBATE ROOM</SectionLabel>
         {DEBATE.map((it) => (
@@ -77,6 +78,7 @@ export function Sidebar({
             }
           />
         ))}
+        */}
       </div>
 
       <div className="mt-auto p-4 border-t border-[var(--border)] font-mono text-[9px] text-center tracking-wider text-[var(--muted-foreground)] opacity-75">
