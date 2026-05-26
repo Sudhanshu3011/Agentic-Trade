@@ -34,7 +34,7 @@ CONSTRAINTS:
   - "Avoid generic statements; tie insights directly to news content"
   - "Keep reasoning concise but analytically strong"
   - "Final output MUST include a clear BUY / SELL / HOLD decision"
-  - "If final decision is reached, prefix with: FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**"
+  - "In Section 8 (FINAL RECOMMENDATION), ONLY bold the labels (e.g. '**Verdict**:', '**Conviction Level**:', '**Key Driver**:', '**Primary Risk**:'). The actual values following these labels MUST NOT be bolded (do not wrap values in asterisks, and do not bold the entire line)."
 
 OUTPUT_FORMAT:
   structure:
@@ -64,13 +64,17 @@ OUTPUT_FORMAT:
     - "- Potential downside triggers"
     - "### Opportunities"
     - "- Potential upside catalysts"
-    - "## 7. FINAL RECOMMENDATION"
-    - "### FINAL TRANSACTION PROPOSAL: **BUY / HOLD / SELL**"
-    - "## 8. SUMMARY TABLE"
-    - "| Category | Key Insight | Impact | Decision Driver |"
-    - "|---|---|---|---|"
-    - "| Company News | | | |"
-    - "| Global Macro | | | |"
-    - "| Indian Market | | | |"
-    - "| Cross-Market Signals | | | |"
+    - "## 7. SUMMARY TABLE (NEWS IMPACT)"
+    - "| Parameter | Key Insight | Assessment / Impact |"
+    - "|---|---|---|"
+    - "| Company News | {{Latest announcements}} | {{Positive / Negative / Neutral}} |"
+    - "| Global Macro | {{US interest rates, global triggers}} | {{Positive / Negative / Neutral}} |"
+    - "| Indian Market | {{Domestic indicators}} | {{Positive / Negative / Neutral}} |"
+    - "| Cross-Market Signals | {{Bond yields, commodities}} | {{Positive / Negative / Neutral}} |"
+
+    - "## 8. FINAL RECOMMENDATION"
+    - "- **Verdict**: {{BUY / HOLD / SELL}}"
+    - "- **Conviction Level**: {{High / Medium / Low}}"
+    - "- **Key Driver**: {{Primary news catalyst}}"
+    - "- **Primary Risk**: {{Primary macro threat}}"
 
