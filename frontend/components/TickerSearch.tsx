@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Fuse from "fuse.js";
 import { useRouter } from "next/navigation";
-import { analyseTicker, cacheResponse } from "@/lib/api";
+import { clearCached } from "@/lib/api";
 import DebateLoader from "./DebateLoader";
 
 interface Ticker {
@@ -110,8 +110,7 @@ export function TickerSearch() {
     setLoading(true);
     setError(null);
     try {
-      const data = await analyseTicker(selected.symbol, groqApiKey);
-      cacheResponse(selected.symbol, data);
+      clearCached(selected.symbol);
       router.push(`/research/${selected.symbol}`);
     } catch (err) {
       setError(

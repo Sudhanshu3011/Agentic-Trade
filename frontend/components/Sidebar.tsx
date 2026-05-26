@@ -30,11 +30,11 @@ interface Item {
 }
 
 const ANALYSTS: Item[] = [
-  { key: "news", label: "News Analyst", icon: Newspaper },
   { key: "technical", label: "Technical Analyst", icon: LineChart },
   { key: "fundamental", label: "Fundamental Analyst", icon: BarChart2 },
   { key: "market", label: "Market Analyst", icon: Globe },
   { key: "sector", label: "Sector Analyst", icon: Layers },
+  { key: "news", label: "News Analyst", icon: Newspaper },
 ];
 
 const DEBATE: Item[] = [

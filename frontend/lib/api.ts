@@ -1,4 +1,5 @@
 export type Decision = "BUY" | "SELL" | "HOLD";
+export type ReportKey = "news" | "technical" | "fundamental" | "market" | "sector";
 
 export interface AnalyseResponse {
   ticker: string;
@@ -81,12 +82,34 @@ const DEFAULT_VERDICT = {
 };
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const STREAM_PARAGRAPH_DELAY_MS = 120;
+const STREAM_WORD_BATCH_SIZE = 4;
+const STREAM_WORD_BATCH_DELAY_MS = 42;
 
-export async function analyseTicker(ticker: string, groqApiKey: string): Promise<AnalyseResponse> {
+export function normalizeTicker(ticker: string) {
   let cleanTicker = ticker.trim().toUpperCase();
   if (!cleanTicker.endsWith(".NS")) {
     cleanTicker = `${cleanTicker}.NS`;
   }
+  return cleanTicker;
+}
+
+export function createEmptyAnalyseResponse(ticker: string): AnalyseResponse {
+  return {
+    ticker: normalizeTicker(ticker),
+    news_report: "",
+    technical_report: "",
+    fundamental_report: "",
+    market_report: "",
+    sector_report: "",
+    investment_debate: DEFAULT_DEBATE,
+    research_verdict: DEFAULT_VERDICT,
+    status: "streaming",
+  };
+}
+
+export async function analyseTicker(ticker: string, groqApiKey: string): Promise<AnalyseResponse> {
+  const cleanTicker = normalizeTicker(ticker);
   const url = `${API_BASE_URL}/analyze`;
 
   const headers: Record<string, string> = {
@@ -128,20 +151,205 @@ export async function analyseTicker(ticker: string, groqApiKey: string): Promise
   return data;
 }
 
+type StreamEvent =
+  | { type: "prefetch_start"; ticker: string }
+  | { type: "prefetch_done"; ticker: string; charts_data?: AnalyseResponse["charts_data"] }
+  | { type: "report_start"; report: ReportKey }
+  | { type: "paragraph"; report: ReportKey; content: string }
+  | { type: "report_done"; report: ReportKey }
+  | { type: "report_error"; report: ReportKey; message: string }
+  | ({ type: "done"; ticker: string; status: string } & Partial<AnalyseResponse>)
+  | { type: "error"; ticker?: string; message: string };
+
+const REPORT_FIELD: Record<ReportKey, keyof Pick<AnalyseResponse, "news_report" | "technical_report" | "fundamental_report" | "market_report" | "sector_report">> = {
+  news: "news_report",
+  technical: "technical_report",
+  fundamental: "fundamental_report",
+  market: "market_report",
+  sector: "sector_report",
+};
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRevealAsBlock(content: string) {
+  const trimmed = content.trim();
+  return (
+    trimmed.includes("\n|") ||
+    trimmed.startsWith("|") ||
+    trimmed.includes("```") ||
+    trimmed.length < 32
+  );
+}
+
+export async function analyseTickerStream({
+  ticker,
+  groqApiKey,
+  signal,
+  onData,
+  onReportStart,
+  onReportDone,
+}: {
+  ticker: string;
+  groqApiKey: string;
+  signal?: AbortSignal;
+  onData: (data: AnalyseResponse) => void;
+  onReportStart?: (report: ReportKey) => void;
+  onReportDone?: (report: ReportKey) => void;
+}): Promise<AnalyseResponse> {
+  const cleanTicker = normalizeTicker(ticker);
+  const url = `${API_BASE_URL}/analyze/stream`;
+  const data = createEmptyAnalyseResponse(cleanTicker);
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (groqApiKey) {
+    headers["Groq-API-Key"] = groqApiKey.trim();
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ticker: cleanTicker }),
+    signal,
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    const message = errorBody?.detail?.message || `Request failed with status ${res.status}`;
+    throw new Error(message);
+  }
+
+  if (!res.body) {
+    throw new Error("Streaming response is not supported by this browser.");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const handleEvent = async (event: StreamEvent) => {
+    if (event.type === "prefetch_done") {
+      data.charts_data = event.charts_data;
+      onData({ ...data });
+      return;
+    }
+
+    if (event.type === "report_start") {
+      onReportStart?.(event.report);
+      return;
+    }
+
+    if (event.type === "paragraph") {
+      await sleep(STREAM_PARAGRAPH_DELAY_MS);
+      const field = REPORT_FIELD[event.report];
+      if (shouldRevealAsBlock(event.content)) {
+        data[field] = `${data[field] || ""}${event.content}`;
+        onData({ ...data });
+        return;
+      }
+
+      const parts = event.content.split(/(\s+)/);
+      let pending = "";
+      let words = 0;
+
+      for (const part of parts) {
+        pending += part;
+        if (part.trim()) {
+          words += 1;
+        }
+
+        if (words >= STREAM_WORD_BATCH_SIZE) {
+          data[field] = `${data[field] || ""}${pending}`;
+          pending = "";
+          words = 0;
+          onData({ ...data });
+          await sleep(STREAM_WORD_BATCH_DELAY_MS);
+        }
+      }
+
+      if (pending) {
+        data[field] = `${data[field] || ""}${pending}`;
+        onData({ ...data });
+      }
+      return;
+    }
+
+    if (event.type === "report_done") {
+      onReportDone?.(event.report);
+      return;
+    }
+
+    if (event.type === "report_error") {
+      const field = REPORT_FIELD[event.report];
+      data[field] = `${data[field] || ""}\n\nAnalysis failed: ${event.message}`;
+      onReportDone?.(event.report);
+      onData({ ...data });
+      return;
+    }
+
+    if (event.type === "done") {
+      data.ticker = event.ticker ?? cleanTicker;
+      data.status = event.status || "success";
+      data.news_report = event.news_report || data.news_report || "No news report available.";
+      data.technical_report = event.technical_report || data.technical_report || "No technical report available.";
+      data.fundamental_report = event.fundamental_report || data.fundamental_report || "No fundamental report available.";
+      data.market_report = event.market_report || data.market_report || "No market report available.";
+      data.sector_report = event.sector_report || data.sector_report || "No sector report available.";
+      onData({ ...data });
+      return;
+    }
+
+    if (event.type === "error") {
+      throw new Error(event.message);
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      await handleEvent(JSON.parse(trimmed) as StreamEvent);
+    }
+
+    if (done) break;
+  }
+
+  if (buffer.trim()) {
+    await handleEvent(JSON.parse(buffer.trim()) as StreamEvent);
+  }
+
+  data.status = data.status === "streaming" ? "success" : data.status;
+  return data;
+}
+
 const KEY = (t: string) => `arbor:research:${t.toUpperCase()}`;
 
 export function cacheResponse(ticker: string, data: AnalyseResponse) {
   try {
-    let clean = ticker.trim().toUpperCase();
-    if (!clean.endsWith(".NS")) clean = `${clean}.NS`;
+    const clean = normalizeTicker(ticker);
     sessionStorage.setItem(KEY(clean), JSON.stringify(data));
+  } catch {}
+}
+
+export function clearCached(ticker: string) {
+  try {
+    sessionStorage.removeItem(KEY(normalizeTicker(ticker)));
   } catch {}
 }
 
 export function readCached(ticker: string): AnalyseResponse | null {
   try {
-    let clean = ticker.trim().toUpperCase();
-    if (!clean.endsWith(".NS")) clean = `${clean}.NS`;
+    const clean = normalizeTicker(ticker);
     const raw = sessionStorage.getItem(KEY(clean));
     return raw ? (JSON.parse(raw) as AnalyseResponse) : null;
   } catch {

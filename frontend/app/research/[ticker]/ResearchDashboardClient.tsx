@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  analyseTicker,
+  analyseTickerStream,
   cacheResponse,
+  createEmptyAnalyseResponse,
   readCached,
   type AnalyseResponse,
+  type ReportKey,
 } from "@/lib/api";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { Sidebar, type ViewKey } from "@/components/Sidebar";
@@ -21,10 +23,17 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
   const router = useRouter();
   const [data, setData] = useState<AnalyseResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<ViewKey>("news");
+  const [view, setView] = useState<ViewKey>("technical");
+  const [streamingReports, setStreamingReports] = useState<Record<ReportKey, boolean>>({
+    news: false,
+    technical: false,
+    fundamental: false,
+    market: false,
+    sector: false,
+  });
 
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const cached = readCached(ticker);
     if (cached) {
       setData(cached);
@@ -32,20 +41,29 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
     }
 
     const groqApiKey = localStorage.getItem("groq_api_key") || "";
+    setData(createEmptyAnalyseResponse(ticker));
 
-    analyseTicker(ticker, groqApiKey)
+    analyseTickerStream({
+      ticker,
+      groqApiKey,
+      signal: controller.signal,
+      onData: setData,
+      onReportStart: (report) =>
+        setStreamingReports((prev) => ({ ...prev, [report]: true })),
+      onReportDone: (report) =>
+        setStreamingReports((prev) => ({ ...prev, [report]: false })),
+    })
       .then((d) => {
-        if (cancelled) return;
         cacheResponse(ticker, d);
         setData(d);
       })
       .catch((e) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setError(e instanceof Error ? e.message : "Failed to load analysis");
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [ticker]);
 
@@ -71,7 +89,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
   if (!data) return <LoadingScreen ticker={ticker} />;
 
   const verdict = data.research_verdict.decision;
-  const isError = data.status && data.status !== "success";
+  const isError = data.status && !["success", "streaming"].includes(data.status);
 
   return (
     <div className="flex h-screen flex-col">
@@ -108,7 +126,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
               </p>
             </div>
           ) : (
-            <ViewSwitch view={view} data={data} />
+            <ViewSwitch view={view} data={data} streamingReports={streamingReports} />
           )}
         </main>
       </div>
@@ -119,9 +137,11 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
 function ViewSwitch({
   view,
   data,
+  streamingReports,
 }: {
   view: ViewKey;
   data: AnalyseResponse;
+  streamingReports: Record<ReportKey, boolean>;
 }) {
   const t = data.ticker;
 
@@ -133,6 +153,7 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.news_report}
+          isStreaming={streamingReports.news}
           filenameBase={`${t}_news_report`}
         />
       );
@@ -143,6 +164,7 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.technical_report}
+          isStreaming={streamingReports.technical}
           filenameBase={`${t}_technical_report`}
         >
           <TechnicalChart data={data.charts_data?.technical_history} />
@@ -155,6 +177,7 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.fundamental_report}
+          isStreaming={streamingReports.fundamental}
           filenameBase={`${t}_fundamental_report`}
         >
           <FundamentalChart data={data.charts_data?.financials_history} />
@@ -167,6 +190,7 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.market_report}
+          isStreaming={streamingReports.market}
           filenameBase={`${t}_market_report`}
         />
       );
@@ -177,6 +201,7 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.sector_report}
+          isStreaming={streamingReports.sector}
           filenameBase={`${t}_sector_report`}
         />
       );
