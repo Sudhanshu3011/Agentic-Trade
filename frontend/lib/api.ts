@@ -108,49 +108,6 @@ export function createEmptyAnalyseResponse(ticker: string): AnalyseResponse {
   };
 }
 
-export async function analyseTicker(ticker: string, groqApiKey: string): Promise<AnalyseResponse> {
-  const cleanTicker = normalizeTicker(ticker);
-  const url = `${API_BASE_URL}/analyze`;
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  if (groqApiKey) {
-    headers["Groq-API-Key"] = groqApiKey.trim();
-  }
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ ticker: cleanTicker }),
-  });
-
-  if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
-    const message = errorBody?.detail?.message || `Request failed with status ${res.status}`;
-    throw new Error(message);
-  }
-
-  const rawData = await res.json();
-
-  // Inject fallback dummy values if they are missing from the backend response
-  const data: AnalyseResponse = {
-    ticker: rawData.ticker ?? cleanTicker,
-    news_report: rawData.news_report || "No news report available.",
-    technical_report: rawData.technical_report || "No technical report available.",
-    fundamental_report: rawData.fundamental_report || "No fundamental report available.",
-    market_report: rawData.market_report || "No market report available.",
-    sector_report: rawData.sector_report || "No sector report available.",
-    investment_debate: rawData.investment_debate || DEFAULT_DEBATE,
-    research_verdict: rawData.research_verdict || DEFAULT_VERDICT,
-    status: rawData.status || "success",
-    charts_data: rawData.charts_data,
-  };
-
-  return data;
-}
-
 type StreamEvent =
   | { type: "prefetch_start"; ticker: string }
   | { type: "prefetch_done"; ticker: string; charts_data?: AnalyseResponse["charts_data"] }
