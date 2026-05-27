@@ -239,6 +239,12 @@ body {
   }
 }
 
+@keyframes dash {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 /* Premium Typography & Prose Customizations */
 .prose {
   font-family: var(--font-sans), sans-serif;

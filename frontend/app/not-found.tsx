@@ -9,17 +9,66 @@ export default function NotFound() {
       <div />
 
       <div className="max-w-md text-center">
-        {/* Abstract design element / candlestick graphic representation */}
-        <div className="mx-auto mb-8 flex h-16 w-20 items-end justify-center gap-1.5 opacity-80">
-          <div className="relative w-1.5 h-12 bg-zinc-300 rounded-sm">
-            <div className="absolute top-2 w-1.5 h-6 bg-[var(--foreground)] rounded-sm"></div>
-          </div>
-          <div className="relative w-1.5 h-16 bg-zinc-300 rounded-sm">
-            <div className="absolute top-4 w-1.5 h-8 bg-[var(--foreground)] rounded-sm animate-pulse"></div>
-          </div>
-          <div className="relative w-1.5 h-10 bg-zinc-300 rounded-sm">
-            <div className="absolute top-1 w-1.5 h-5 bg-[var(--foreground)] rounded-sm"></div>
-          </div>
+        {/* Animated Stock Chart SVG */}
+        <div className="mx-auto mb-8 flex justify-center">
+          <svg
+            width="280"
+            height="140"
+            viewBox="0 0 280 140"
+            fill="none"
+            className="overflow-visible"
+          >
+            {/* Background Grid */}
+            <g opacity="0.15" stroke="currentColor" strokeWidth="1">
+              <line x1="0" y1="20" x2="280" y2="20" strokeDasharray="4 4" />
+              <line x1="0" y1="55" x2="280" y2="55" strokeDasharray="4 4" />
+              <line x1="0" y1="90" x2="280" y2="90" strokeDasharray="4 4" />
+              <line x1="0" y1="125" x2="280" y2="125" strokeDasharray="4 4" />
+              <line x1="40" y1="0" x2="40" y2="140" strokeDasharray="4 4" />
+              <line x1="100" y1="0" x2="100" y2="140" strokeDasharray="4 4" />
+              <line x1="160" y1="0" x2="160" y2="140" strokeDasharray="4 4" />
+              <line x1="220" y1="0" x2="220" y2="140" strokeDasharray="4 4" />
+            </g>
+
+            {/* Shifting Candlesticks (B&W themed) */}
+            {/* Candle 1 (Hollow / Bullish) */}
+            <g className="animate-[bounce_3s_infinite_ease-in-out]">
+              <line x1="50" y1="40" x2="50" y2="90" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="44" y="50" width="12" height="30" fill="var(--background)" stroke="currentColor" strokeWidth="2" rx="1" />
+            </g>
+
+            {/* Candle 2 (Filled / Bearish) */}
+            <g className="animate-[bounce_3.5s_infinite_ease-in-out]">
+              <line x1="110" y1="60" x2="110" y2="120" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="104" y="75" width="12" height="35" fill="currentColor" stroke="currentColor" strokeWidth="2" rx="1" />
+            </g>
+
+            {/* Candle 3 (Hollow / Bullish) */}
+            <g className="animate-[bounce_2.8s_infinite_ease-in-out]">
+              <line x1="170" y1="20" x2="170" y2="70" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="164" y="30" width="12" height="30" fill="var(--background)" stroke="currentColor" strokeWidth="2" rx="1" />
+            </g>
+
+            {/* Candle 4 (Solid Bearish Candle) */}
+            <g className="animate-[bounce_3.2s_infinite_ease-in-out]">
+              <line x1="230" y1="80" x2="230" y2="135" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="224" y="90" width="12" height="35" fill="currentColor" stroke="currentColor" strokeWidth="2" rx="1" />
+            </g>
+
+            {/* Animated Trend Line */}
+            <path
+              d="M 10 75 L 50 65 L 110 92 L 170 45 L 230 110 L 270 100"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeDasharray="600"
+              strokeDashoffset="600"
+              className="animate-[dash_6s_linear_infinite]"
+            />
+
+           
+            
+          </svg>
         </div>
 
         <p className="font-mono text-[12px] font-bold tracking-wider text-[var(--label)] uppercase">
