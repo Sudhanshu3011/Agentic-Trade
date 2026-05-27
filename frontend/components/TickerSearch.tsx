@@ -22,6 +22,7 @@ export function TickerSearch() {
   const [error, setError] = useState<string | null>(null);
   const [groqApiKey, setGroqApiKey] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const [showIntro, setShowIntro] = useState(true);
   const [fadeOutIntro, setFadeOutIntro] = useState(false);
@@ -84,19 +85,44 @@ export function TickerSearch() {
   };
 
   const handleKey = (e: React.KeyboardEvent) => {
-    if (!open || results.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHighlight((h) => Math.min(h + 1, results.length - 1));
+      if (!open && results.length > 0) {
+        setOpen(true);
+        setHighlight(0);
+        return;
+      }
+      if (results.length === 0) return;
+      setHighlight((h) => {
+        const next = Math.min(h + 1, results.length - 1);
+        scrollToItem(next);
+        return next;
+      });
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setHighlight((h) => Math.max(h - 1, 0));
+      if (!open || results.length === 0) return;
+      setHighlight((h) => {
+        const next = Math.max(h - 1, 0);
+        scrollToItem(next);
+        return next;
+      });
     } else if (e.key === "Enter") {
-      e.preventDefault();
-      handleSelect(results[highlight]);
+      if (open && results.length > 0) {
+        e.preventDefault();
+        handleSelect(results[highlight]);
+      }
     } else if (e.key === "Escape") {
       setOpen(false);
     }
+  };
+
+  const scrollToItem = (index: number) => {
+    requestAnimationFrame(() => {
+      const list = listRef.current;
+      if (!list) return;
+      const item = list.children[index] as HTMLElement | undefined;
+      item?.scrollIntoView({ block: "nearest" });
+    });
   };
 
   const handleAnalyse = async () => {
@@ -203,18 +229,20 @@ export function TickerSearch() {
               />
 
               {open && results.length > 0 && (
-                <div className="absolute left-0 right-0 top-full z-10 max-h-[352px] overflow-y-auto border border-t-0 border-[var(--border)] bg-white rounded-b-lg shadow-lg">
+                <div ref={listRef} role="listbox" className="absolute left-0 right-0 top-full z-10 max-h-[352px] overflow-y-auto border border-t-0 border-[var(--border)] bg-white rounded-b-lg shadow-lg">
                   {results.map((t, i) => (
                     <button
                       key={t.symbol}
                       type="button"
+                      role="option"
+                      aria-selected={i === highlight}
                       onMouseDown={(e) => {
                         e.preventDefault();
                         handleSelect(t);
                       }}
                       onMouseEnter={() => setHighlight(i)}
-                      className={`flex h-11 w-full items-center justify-between px-4 text-left ${
-                        i === highlight ? "bg-[var(--background)]" : "bg-white"
+                      className={`flex h-11 w-full items-center justify-between px-4 text-left transition-colors duration-100 ${
+                        i === highlight ? "bg-[#f0f0ee]" : "bg-white"
                       }`}
                     >
                       <span className="font-mono text-[13px] font-bold text-[var(--foreground)]">
