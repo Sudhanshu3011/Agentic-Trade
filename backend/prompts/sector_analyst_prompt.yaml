@@ -98,7 +98,7 @@ OUTPUT_FORMAT:
     - "| Future Outlook | {{CAGR projection}} | {{Positive / Negative / Neutral}} |"
 
     - "## 8. FINAL RECOMMENDATION"
-    - "- **Verdict**: {{BULLISH / BEARISH / NEUTRAL}}"
+    - "- **Verdict**: {{BUY / HOLD / SELL}}"
     - "- **Conviction Level**: {{High / Medium / Low}}"
     - "- **Key Driver**: {{Primary growth catalyst or regulatory support}}"
     - "- **Primary Risk**: {{Primary sector bottleneck or policy change}}"
