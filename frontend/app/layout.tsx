@@ -9,8 +9,8 @@ const sans = Geist({ variable: "--font-active-sans", subsets: ["latin"] });
 const mono = Geist_Mono({ variable: "--font-active-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Arbor Research",
-  description: "AI-powered equity research for Indian markets",
+  title: "Artha Analytics",
+  description: "AI-powered equity analytics for Indian markets",
 };
 
 export default function RootLayout({

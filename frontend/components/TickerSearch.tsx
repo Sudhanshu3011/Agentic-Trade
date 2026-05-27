@@ -141,7 +141,7 @@ export function TickerSearch() {
               </div>
             </div>
             <h1 className="mt-6 font-mono text-[13px] tracking-[0.25em] text-black uppercase animate-pulse">
-              Arbor Research
+              Artha Analytics
             </h1>
             <p className="mt-2 font-mono text-[10px] tracking-wider text-zinc-400 uppercase">
               Connecting to Indian markets
@@ -158,11 +158,11 @@ export function TickerSearch() {
         <div className="w-full max-w-[480px]">
           <div className="mb-12 text-center">
             <h1 className="font-mono text-[13px] tracking-widest text-[var(--foreground)]">
-              ARBOR RESEARCH
+              ARTHA ANALYTICS
             </h1>
             <div className="mx-auto my-3 h-px w-full bg-[var(--border)]" />
             <p className="text-[13px] text-[var(--muted-foreground)]">
-              AI-powered equity research for Indian markets
+              AI-powered equity analytics for Indian markets
             </p>
           </div>
 
@@ -198,7 +198,7 @@ export function TickerSearch() {
                 onFocus={() => setOpen(true)}
                 onBlur={() => setTimeout(() => setOpen(false), 120)}
                 onKeyDown={handleKey}
-                placeholder="e.g. RELIANCE, TCS, INFY..."
+                placeholder="e.g. RELIANCE, TCS, INFY  ..."
                 className="block h-12 w-full border border-[var(--border)] bg-white px-4 font-mono text-[14px] text-[var(--foreground)] placeholder:text-[var(--label)] focus:border-[var(--foreground)] focus:outline-none rounded-lg shadow-sm"
               />
 
@@ -245,9 +245,10 @@ export function TickerSearch() {
             </p>
           )}
 
-          <p className="mt-10 text-center font-mono text-[10px] tracking-wider text-[var(--label)]">
-            NSE EQUITY | INDIA
-          </p>
+          <div className="mt-10 flex flex-col items-center gap-1.5 font-mono text-[10px] tracking-wider text-[var(--label)]">
+            <span>NSE EQUITY | INDIA</span>
+            <span className="text-[9px] opacity-75">MADE BY CONCEPTWORKSX</span>
+          </div>
         </div>
       </div>
     </>
@@ -274,7 +275,7 @@ function LoadingPanel({ ticker }: { ticker: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-[480px] text-center">
-        <h1 className="font-mono text-[13px] tracking-widest">ARBOR RESEARCH</h1>
+        <h1 className="font-mono text-[13px] tracking-widest">ARTHA ANALYTICS</h1>
         <div className="mx-auto my-3 h-px w-full bg-[var(--border)]" />
         <p className="font-mono text-[13px] text-[var(--muted-foreground)]">
           Initialising agents for {ticker}...

@@ -96,7 +96,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
       {/* Navbar */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] bg-white px-5">
         <div className="font-mono text-[13px] tracking-wider text-[var(--foreground)]">
-          ARBOR RESEARCH
+          ARTHA ANALYTICS
         </div>
         <div className="font-mono text-[13px] text-[var(--muted-foreground)]">
           {data.ticker.split(".")[0].toUpperCase()}.NS · NSE
@@ -112,7 +112,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <Sidebar active={view} onSelect={setView} verdict={verdict} />
+        <Sidebar active={view} onSelect={setView} />
 
         <main className="flex-1 overflow-y-auto bg-[var(--background)] p-8">
           {isError ? (
