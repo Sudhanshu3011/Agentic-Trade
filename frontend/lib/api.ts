@@ -266,8 +266,16 @@ export async function analyseTickerStream({
     }
 
     if (event.type === "report_error") {
-      const field = REPORT_FIELD[event.report];
       const friendlyMsg = classifyError(event.message);
+      
+      // If it is a fatal API-level error (auth, rate limit, service unavailable, forbidden, etc.),
+      // we throw it immediately to show the full-screen error page.
+      const isFatal = /rate limit|invalid api key|access denied|unavailable|internal error/i.test(friendlyMsg);
+      if (isFatal) {
+        throw new Error(friendlyMsg);
+      }
+
+      const field = REPORT_FIELD[event.report];
       data[field] = `${data[field] || ""}\n\n---\n\n> **⚠️ Analysis Interrupted**\n>\n> ${friendlyMsg}\n>\n> You can retry this analysis from the home page.`;
       onReportDone?.(event.report);
       onData({ ...data });
@@ -291,24 +299,28 @@ export async function analyseTickerStream({
     }
   };
 
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value, { stream: !done });
 
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      await handleEvent(JSON.parse(trimmed) as StreamEvent);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        await handleEvent(JSON.parse(trimmed) as StreamEvent);
+      }
+
+      if (done) break;
     }
 
-    if (done) break;
-  }
-
-  if (buffer.trim()) {
-    await handleEvent(JSON.parse(buffer.trim()) as StreamEvent);
+    if (buffer.trim()) {
+      await handleEvent(JSON.parse(buffer.trim()) as StreamEvent);
+    }
+  } finally {
+    reader.releaseLock();
   }
 
   data.status = data.status === "streaming" ? "success" : data.status;
