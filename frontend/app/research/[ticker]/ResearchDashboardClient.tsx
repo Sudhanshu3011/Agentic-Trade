@@ -8,6 +8,7 @@ import {
   cacheResponse,
   createEmptyAnalyseResponse,
   readCached,
+  clearCached,
   type AnalyseResponse,
   type ReportKey,
 } from "@/lib/api";
@@ -24,6 +25,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
   const [data, setData] = useState<AnalyseResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewKey>("technical");
+  const [retryCount, setRetryCount] = useState(0);
   const [streamingReports, setStreamingReports] = useState<Record<ReportKey, boolean>>({
     news: false,
     technical: false,
@@ -34,8 +36,14 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
 
   useEffect(() => {
     const controller = new AbortController();
+    
+    // Clear cache if this is a manual retry
+    if (retryCount > 0) {
+      clearCached(ticker);
+    }
+
     const cached = readCached(ticker);
-    if (cached) {
+    if (cached && retryCount === 0) {
       setData(cached);
       return;
     }
@@ -65,22 +73,45 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
     return () => {
       controller.abort();
     };
-  }, [ticker]);
+  }, [ticker, retryCount]);
 
   if (error) {
+    const isRateLimit = /rate limit|wait/i.test(error);
+    const isNetwork = /connect|backend|running/i.test(error);
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
-        <div className="max-w-md text-center">
-          <p className="font-mono text-[11px] tracking-wider text-[var(--label)]">
-            ANALYSIS FAILED
+        <div className="max-w-lg text-center">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--background)] border border-[var(--border)]">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={isRateLimit ? "var(--hold)" : "var(--sell)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+          </div>
+          <p className="font-mono text-[12px] tracking-wider text-[var(--label)] mb-2">
+            {isRateLimit ? "RATE LIMIT REACHED" : isNetwork ? "CONNECTION FAILED" : "ANALYSIS FAILED"}
           </p>
-          <p className="mt-3 text-[14px] text-[var(--foreground)]">{error}</p>
-          <button
-            onClick={() => router.push("/")}
-            className="mt-6 h-10 border border-[var(--border)] bg-white px-4 font-mono text-[12px] hover:border-[var(--foreground)] rounded-lg shadow-sm transition-all hover:bg-zinc-50"
-          >
-            ← New Analysis
-          </button>
+          <p className="mt-3 text-[14px] leading-relaxed text-[var(--foreground)]">
+            {error}
+          </p>
+          <div className="mt-8 flex items-center justify-center gap-3">
+            <button
+              onClick={() => { 
+                setError(null); 
+                setData(null); 
+                setRetryCount((prev) => prev + 1);
+              }}
+              className="h-10 border border-[var(--foreground)] bg-[var(--foreground)] px-5 font-mono text-[12px] text-white rounded-lg shadow-sm transition-all hover:bg-[#333330]"
+            >
+              ↻ Retry
+            </button>
+            <button
+              onClick={() => router.push("/")}
+              className="h-10 border border-[var(--border)] bg-white px-5 font-mono text-[12px] hover:border-[var(--foreground)] rounded-lg shadow-sm transition-all hover:bg-zinc-50"
+            >
+              ← New Analysis
+            </button>
+          </div>
         </div>
       </div>
     );

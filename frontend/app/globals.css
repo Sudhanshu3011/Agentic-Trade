@@ -244,6 +244,7 @@ body {
   font-family: var(--font-sans), sans-serif;
   color: #1c1917;
   line-height: 1.68;
+  /* text-align: justify; */
 }
 
 /* Headings spacing and color */
@@ -284,8 +285,8 @@ body {
 }
 
 .prose li {
-  margin-top: 0.4rem;
-  margin-bottom: 0.4rem;
+  margin-top: 0.85rem;
+  margin-bottom: 0.85rem;
   color: #1c1917;
   font-size: 0.975rem;
 }

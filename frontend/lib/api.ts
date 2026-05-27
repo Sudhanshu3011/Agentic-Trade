@@ -81,6 +81,23 @@ const DEFAULT_VERDICT = {
   rationale: "The consensus recommendation is HOLD. While the long-term fundamentals and market position remain strong, near-term headwinds and valuation metrics suggest waiting for a more favorable entry price."
 };
 
+const ERROR_PATTERNS: [RegExp, string][] = [
+  [/rate.?limit|429|too many requests|quota/i, "API rate limit reached. The Groq free tier allows a limited number of requests per minute. Please wait a minute and try again."],
+  [/401|unauthorized|invalid.*key|authentication/i, "Invalid API key. Please check your Groq API key on the home page and try again."],
+  [/403|forbidden/i, "Access denied. Your API key may not have the required permissions."],
+  [/timeout|timed?\s*out|deadline/i, "The request timed out. The analysis server may be under heavy load — please try again shortly."],
+  [/network|fetch|ECONNREFUSED|ENOTFOUND|connection.*refused/i, "Unable to connect to the analysis server. Please ensure the backend is running and try again."],
+  [/500|internal server/i, "The analysis server encountered an internal error. Please try again later."],
+  [/503|service unavailable/i, "The analysis service is temporarily unavailable. Please try again in a few moments."],
+];
+
+function classifyError(raw: string): string {
+  for (const [pattern, friendly] of ERROR_PATTERNS) {
+    if (pattern.test(raw)) return friendly;
+  }
+  return raw;
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const STREAM_PARAGRAPH_DELAY_MS = 10;
 const STREAM_WORD_BATCH_SIZE = 16;
@@ -167,17 +184,25 @@ export async function analyseTickerStream({
     headers["Groq-API-Key"] = groqApiKey.trim();
   }
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ ticker: cleanTicker }),
-    signal,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ticker: cleanTicker }),
+      signal,
+    });
+  } catch (fetchErr) {
+    if (signal?.aborted) throw fetchErr;
+    throw new Error(classifyError(
+      fetchErr instanceof Error ? fetchErr.message : "Network error"
+    ));
+  }
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
-    const message = errorBody?.detail?.message || `Request failed with status ${res.status}`;
-    throw new Error(message);
+    const raw = errorBody?.detail?.message || errorBody?.detail || `Request failed with status ${res.status}`;
+    throw new Error(classifyError(typeof raw === "string" ? raw : JSON.stringify(raw)));
   }
 
   if (!res.body) {
@@ -242,7 +267,8 @@ export async function analyseTickerStream({
 
     if (event.type === "report_error") {
       const field = REPORT_FIELD[event.report];
-      data[field] = `${data[field] || ""}\n\nAnalysis failed: ${event.message}`;
+      const friendlyMsg = classifyError(event.message);
+      data[field] = `${data[field] || ""}\n\n---\n\n> **⚠️ Analysis Interrupted**\n>\n> ${friendlyMsg}\n>\n> You can retry this analysis from the home page.`;
       onReportDone?.(event.report);
       onData({ ...data });
       return;
@@ -261,7 +287,7 @@ export async function analyseTickerStream({
     }
 
     if (event.type === "error") {
-      throw new Error(event.message);
+      throw new Error(classifyError(event.message));
     }
   };
 
