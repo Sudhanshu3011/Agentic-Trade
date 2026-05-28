@@ -8,6 +8,7 @@ from langchain_core.runnables import (
 from langchain_core.output_parsers import StrOutputParser
 
 from agents.base_agent import BaseAgent
+from core.error import handle_llm_errors
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -80,6 +81,7 @@ class TechnicalAnalyst(BaseAgent):
             error_chain,
         )
 
+    @handle_llm_errors()
     def run(self, state):
         """Invoke the Technical Analyst chain with the relevant portion of the state."""
 
@@ -88,19 +90,6 @@ class TechnicalAnalyst(BaseAgent):
         )
 
         return self.chain.invoke(
-            {
-                "ticker": state["ticker_of_company"],
-                "technical_data": state.get("data_bundle", {}).get("technical_data"),
-            }
-        )
-
-    def stream(self, state):
-        """Stream the Technical Analyst chain output."""
-
-        logger.info(
-            f"Streaming technical analyst pipeline | ticker={state['ticker_of_company']}"
-        )
-        yield from self.chain.stream(
             {
                 "ticker": state["ticker_of_company"],
                 "technical_data": state.get("data_bundle", {}).get("technical_data"),

@@ -21,5 +21,4 @@ def get_llm(api_key: str = None):
         model=GROQ_MODEL,
         api_key=api_key,
         temperature=0.3,
-        streaming=True,
     )

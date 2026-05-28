@@ -7,6 +7,7 @@ from langchain_core.runnables import (
 from langchain_core.output_parsers import StrOutputParser
 
 from agents.base_agent import BaseAgent
+from core.error import handle_llm_errors
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -68,7 +69,6 @@ class FundamentalAnalyst(BaseAgent):
             RunnableLambda(_build_messages) | self.prompt | self.llm | StrOutputParser()
         )
 
-        
         error_chain = RunnableLambda(
             lambda x: f"Failed to fetch fundamental data for "
             f"{x.get('ticker', 'N/A')}: {x.get('fundamental_data', {}).get('error', 'Unknown error')}"
@@ -83,6 +83,7 @@ class FundamentalAnalyst(BaseAgent):
             error_chain,
         )
 
+    @handle_llm_errors()
     def run(self, state):
         """Invoke the Fundamental Analyst chain with the relevant portion of the state."""
 
@@ -90,21 +91,6 @@ class FundamentalAnalyst(BaseAgent):
             f"Running fundamental analyst pipeline | ticker={state['ticker_of_company']}"
         )
         return self.chain.invoke(
-            {
-                "ticker": state["ticker_of_company"],
-                "fundamental_data": state.get("data_bundle", {}).get(
-                    "fundamental_data"
-                ),
-            }
-        )
-
-    def stream(self, state):
-        """Stream the Fundamental Analyst chain output."""
-
-        logger.info(
-            f"Streaming fundamental analyst pipeline | ticker={state['ticker_of_company']}"
-        )
-        yield from self.chain.stream(
             {
                 "ticker": state["ticker_of_company"],
                 "fundamental_data": state.get("data_bundle", {}).get(

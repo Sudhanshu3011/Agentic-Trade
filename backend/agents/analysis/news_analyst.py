@@ -8,6 +8,7 @@ from tools.news_tools import (
     get_indian_market_news,
     get_global_market_news,
 )
+from core.error import handle_llm_errors
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -59,6 +60,7 @@ class NewsAnalyst(BaseAgent):
             | StrOutputParser()
         )
 
+    @handle_llm_errors()
     def run(self, state) -> str:
         """Invoke the News Analyst chain with the relevant portion of the state."""
 
@@ -66,19 +68,6 @@ class NewsAnalyst(BaseAgent):
             f"Running news analyst pipeline | ticker={state['ticker_of_company']}"
         )
         return self.chain.invoke(
-            {
-                "ticker": state["ticker_of_company"],
-                "company_news": state.get("data_bundle", {}).get("news_data"),
-            }
-        )
-
-    def stream(self, state):
-        """Stream the News Analyst chain output."""
-
-        logger.info(
-            f"Streaming news analyst pipeline | ticker={state['ticker_of_company']}"
-        )
-        yield from self.chain.stream(
             {
                 "ticker": state["ticker_of_company"],
                 "company_news": state.get("data_bundle", {}).get("news_data"),
