@@ -3,8 +3,6 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 from typing import Any
-import logging
-from core.error import DataFetchError, DataParseError
 from core.logging import get_logger
 
 logger = get_logger(__name__)
