@@ -12,10 +12,7 @@ export type ViewKey =
   | "technical"
   | "fundamental"
   | "market"
-  | "sector"
-  | "bull"
-  | "bear"
-  | "manager";
+  | "sector";
 
 interface Item {
   key: ViewKey;

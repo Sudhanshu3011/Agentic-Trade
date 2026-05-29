@@ -4,39 +4,35 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  analyseTickerStream,
+  analyseTicker,
+  AnalysisError,
   cacheResponse,
-  createEmptyAnalyseResponse,
   readCached,
   clearCached,
   type AnalyseResponse,
-  type ReportKey,
 } from "@/lib/api";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { Sidebar, type ViewKey } from "@/components/Sidebar";
 import { ReportView } from "@/components/ReportView";
-import { DebateRoom } from "@/components/DebateRoom";
-import { decisionColor } from "@/components/VerdictBadge";
 import { TechnicalChart } from "@/components/TechnicalChart";
 import { FundamentalChart } from "@/components/FundamentalChart";
+
+interface ErrorInfo {
+  title: string;
+  message: string;
+}
 
 export default function ResearchDashboardClient({ ticker }: { ticker: string }) {
   const router = useRouter();
   const [data, setData] = useState<AnalyseResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorInfo | null>(null);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<ViewKey>("technical");
   const [retryCount, setRetryCount] = useState(0);
-  const [streamingReports, setStreamingReports] = useState<Record<ReportKey, boolean>>({
-    news: false,
-    technical: false,
-    fundamental: false,
-    market: false,
-    sector: false,
-  });
 
   useEffect(() => {
     const controller = new AbortController();
-    
+
     // Clear cache if this is a manual retry
     if (retryCount > 0) {
       clearCached(ticker);
@@ -45,29 +41,37 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
     const cached = readCached(ticker);
     if (cached && retryCount === 0) {
       setData(cached);
+      setLoading(false);
       return;
     }
 
-    const groqApiKey = localStorage.getItem("groq_api_key") || "";
-    setData(createEmptyAnalyseResponse(ticker));
+    setLoading(true);
+    setError(null);
+    setData(null);
 
-    analyseTickerStream({
+    const groqApiKey = localStorage.getItem("groq_api_key") || "";
+
+    analyseTicker({
       ticker,
       groqApiKey,
       signal: controller.signal,
-      onData: setData,
-      onReportStart: (report) =>
-        setStreamingReports((prev) => ({ ...prev, [report]: true })),
-      onReportDone: (report) =>
-        setStreamingReports((prev) => ({ ...prev, [report]: false })),
     })
       .then((d) => {
         cacheResponse(ticker, d);
         setData(d);
+        setLoading(false);
       })
       .catch((e) => {
         if (controller.signal.aborted) return;
-        setError(e instanceof Error ? e.message : "Failed to load analysis");
+        if (e instanceof AnalysisError) {
+          setError({ title: e.title, message: e.message });
+        } else {
+          setError({
+            title: "SOMETHING WENT WRONG",
+            message: e instanceof Error ? e.message : "An unexpected error occurred while loading the analysis.",
+          });
+        }
+        setLoading(false);
       });
 
     return () => {
@@ -75,30 +79,60 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
     };
   }, [ticker, retryCount]);
 
+  // ── Error page ─────────────────────────────────────────────────────────
   if (error) {
-    const isRateLimit = /rate limit|wait/i.test(error);
-    const isNetwork = /connect|backend|running/i.test(error);
+    const isRateLimit = /rate limit|too many|throttl/i.test(error.title);
+    const isAuth = /auth|api key/i.test(error.title);
+
+    // Pick icon color: amber for rate limits, red for everything else
+    const iconColor = isRateLimit ? "var(--hold)" : "var(--sell)";
+
+    // Pick SVG icon based on error type
+    const icon = isAuth ? (
+      // Lock icon for auth errors
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+      </svg>
+    ) : isRateLimit ? (
+      // Clock icon for rate limits
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    ) : (
+      // Alert triangle for everything else
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    );
+
     return (
       <div className="flex min-h-screen items-center justify-center px-6">
         <div className="max-w-lg text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--background)] border border-[var(--border)]">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={isRateLimit ? "var(--hold)" : "var(--sell)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
+          {/* Icon */}
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--background)] border border-[var(--border)]">
+            {icon}
           </div>
-          <p className="font-mono text-[12px] tracking-wider text-[var(--label)] mb-2">
-            {isRateLimit ? "RATE LIMIT REACHED" : isNetwork ? "CONNECTION FAILED" : "ANALYSIS FAILED"}
+
+          {/* Error title */}
+          <p className="font-mono text-[12px] tracking-[0.2em] mb-4" style={{ color: iconColor }}>
+            {error.title}
           </p>
-          <p className="mt-3 text-[14px] leading-relaxed text-[var(--foreground)]">
-            {error}
+
+          {/* Error message */}
+          <p className="text-[15px] leading-relaxed text-[var(--foreground)]">
+            {error.message}
           </p>
+
+          {/* Buttons */}
           <div className="mt-8 flex items-center justify-center gap-3">
             <button
-              onClick={() => { 
-                setError(null); 
-                setData(null); 
+              onClick={() => {
+                setError(null);
+                setData(null);
                 setRetryCount((prev) => prev + 1);
               }}
               className="h-10 border border-[var(--foreground)] bg-[var(--foreground)] px-5 font-mono text-[12px] text-white rounded-lg shadow-sm transition-all hover:bg-[#333330]"
@@ -117,9 +151,11 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
     );
   }
 
-  if (!data) return <LoadingScreen ticker={ticker} />;
+  // ── Loading screen ─────────────────────────────────────────────────────
+  if (loading || !data) return <LoadingScreen ticker={ticker} />;
 
-  const isError = data.status && !["success", "streaming"].includes(data.status);
+  // ── Dashboard ──────────────────────────────────────────────────────────
+  const isError = data.status && !["success"].includes(data.status);
 
   return (
     <div className="flex h-screen flex-col">
@@ -156,7 +192,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
               </p>
             </div>
           ) : (
-            <ViewSwitch view={view} data={data} streamingReports={streamingReports} />
+            <ViewSwitch view={view} data={data} />
           )}
         </main>
       </div>
@@ -167,11 +203,9 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
 function ViewSwitch({
   view,
   data,
-  streamingReports,
 }: {
   view: ViewKey;
   data: AnalyseResponse;
-  streamingReports: Record<ReportKey, boolean>;
 }) {
   const t = data.ticker;
 
@@ -183,7 +217,6 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.news_report}
-          isStreaming={streamingReports.news}
           filenameBase={`${t}_news_report`}
         />
       );
@@ -194,7 +227,6 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.technical_report}
-          isStreaming={streamingReports.technical}
           filenameBase={`${t}_technical_report`}
         >
           <TechnicalChart data={data.charts_data?.technical_history} />
@@ -207,7 +239,6 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.fundamental_report}
-          isStreaming={streamingReports.fundamental}
           filenameBase={`${t}_fundamental_report`}
         >
           <FundamentalChart data={data.charts_data?.financials_history} />
@@ -220,7 +251,6 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.market_report}
-          isStreaming={streamingReports.market}
           filenameBase={`${t}_market_report`}
         />
       );
@@ -231,33 +261,8 @@ function ViewSwitch({
           ticker={t}
           status={data.status}
           content={data.sector_report}
-          isStreaming={streamingReports.sector}
           filenameBase={`${t}_sector_report`}
         />
       );
-    case "bull":
-      return (
-        <ReportView
-          title="Bull Analyst — Investment Thesis"
-          ticker={t}
-          status={data.status}
-          content={data.investment_debate.bull_thesis}
-          accent={decisionColor("BUY")}
-          filenameBase={`${t}_bull_thesis`}
-        />
-      );
-    case "bear":
-      return (
-        <ReportView
-          title="Bear Analyst — Investment Thesis"
-          ticker={t}
-          status={data.status}
-          content={data.investment_debate.bear_thesis}
-          accent={decisionColor("SELL")}
-          filenameBase={`${t}_bear_thesis`}
-        />
-      );
-    case "manager":
-      return <DebateRoom data={data} />;
   }
 }

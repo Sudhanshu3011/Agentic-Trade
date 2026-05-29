@@ -3,10 +3,11 @@ from tools.technical_tools import process_technical_data
 from tools.sector_tools import get_company_sector
 from tools.market_tools import process_market_data
 from tools.news_tools import get_company_news
+from tools.chart_tools import extract_charts_data
 import json
 
 
-def process_prefetch_result(raw_data: dict) -> dict:
+def process_prefetch_result(raw_data: dict) -> tuple[dict, dict]:
     """
     Process the raw data fetched in the prefetch step to extract relevant information
     for each analyst. Make the raw_bundlle to the structired format expected by the analysts.
@@ -32,7 +33,9 @@ def process_prefetch_result(raw_data: dict) -> dict:
         ticker=raw_data.get("ticker", ""), prefetched_info=raw_data.get("info", {})
     )
 
+    charts_data = extract_charts_data(raw_data, processed_bundle["fundamental_data"])
+
     # with open("data.json",'w+') as f:
     #     json.dump(processed_bundle,f,indent=2)
 
-    return processed_bundle
+    return processed_bundle, charts_data

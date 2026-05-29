@@ -9,7 +9,6 @@ export function ReportView({
   content,
   accent,
   filenameBase,
-  isStreaming = false,
   children,
 }: {
   title: string;
@@ -18,10 +17,9 @@ export function ReportView({
   content: string;
   accent?: string;
   filenameBase: string;
-  isStreaming?: boolean;
   children?: React.ReactNode;
 }) {
-  const canDownload = Boolean(content.trim()) && !isStreaming;
+  const canDownload = Boolean(content.trim());
 
   return (
     <div className="mx-auto max-w-[920px]">
@@ -57,10 +55,9 @@ export function ReportView({
 
       <div className="mt-6 border border-[var(--border)] bg-white p-8 rounded-xl shadow-sm mb-6">
         {content.trim() ? <Markdown content={content} /> : <ReportSkeleton />}
-        {isStreaming && content.trim() ? <StreamingLine /> : null}
       </div>
 
-      {!isStreaming && content.trim() ? children : null}
+      {content.trim() ? children : null}
     </div>
   );
 }
@@ -106,15 +103,6 @@ function ReportSkeleton() {
         <div className="h-3 w-full animate-pulse rounded bg-zinc-100" />
         <div className="h-3 w-10/12 animate-pulse rounded bg-zinc-100" />
       </div>
-    </div>
-  );
-}
-
-function StreamingLine() {
-  return (
-    <div className="mt-6 flex items-center gap-2">
-      <span className="h-4 w-1 animate-pulse rounded-full bg-[var(--foreground)]" />
-      <span className="h-2 w-24 animate-pulse rounded-full bg-zinc-200" />
     </div>
   );
 }
