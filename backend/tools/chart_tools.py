@@ -3,6 +3,7 @@ import ta
 import math
 from typing import Any, Optional
 from core.logging import get_logger
+from tools.utils.fundamental_tool_helper import _df_row
 
 logger = get_logger(__name__)
 
@@ -68,20 +69,53 @@ def extract_charts_data(raw_data: dict, fundamental_data: dict) -> Optional[dict
 
     # ── Financials history ──────────────────────────────────────────────
     try:
-        if fundamental_data and fundamental_data.get("status") == "success":
-            income_stmt = fundamental_data.get("income_stmt", {})
-            balance_sheet_data = fundamental_data.get("balance_sheet", {})
-            cash_flow_data = fundamental_data.get("cash_flow", {})
-            fundamentals = fundamental_data.get("fundamentals", {})
+        financials_df = raw_data.get("financials")
+        balance_sheet_df = raw_data.get("balance_sheet")
+        cash_flow_df = raw_data.get("cash_flow")
+        
+        financials_history = {}
 
-            financials_history = {
-                "income_stmt": income_stmt.get("income_statement", {}),
-                "balance_sheet": balance_sheet_data.get("balance_sheet", {}),
-                "cash_flow": cash_flow_data.get("cash_flow", {}),
-                "ratios": fundamentals.get("fundamentals", {}),
+        if financials_df is not None and not financials_df.empty:
+            financials_history["income_stmt"] = {
+                "revenue": _df_row(financials_df, "Total Revenue"),
+                "ebitda": _df_row(financials_df, "EBITDA", "Normalized EBITDA"),
+                "net_income": _df_row(financials_df, "Net Income", "Net Income Common Stockholders"),
+                "eps_diluted": _df_row(financials_df, "Diluted EPS"),
             }
+        else:
+            financials_history["income_stmt"] = {}
 
-            charts_data["financials_history"] = financials_history
+        if balance_sheet_df is not None and not balance_sheet_df.empty:
+            financials_history["balance_sheet"] = {
+                "cash": _df_row(balance_sheet_df, "Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"),
+                "total_liabilities": _df_row(balance_sheet_df, "Total Liabilities Net Minority Interest", "Total Liabilities"),
+                "total_debt": _df_row(balance_sheet_df, "Total Debt"),
+                "shareholders_equity": _df_row(balance_sheet_df, "Stockholders Equity", "Common Stock Equity"),
+            }
+        else:
+            financials_history["balance_sheet"] = {}
+
+        if cash_flow_df is not None and not cash_flow_df.empty:
+            ocf = _df_row(cash_flow_df, "Operating Cash Flow", "Cash Flow From Continuing Operating Activities")
+            capex = _df_row(cash_flow_df, "Capital Expenditure", "Purchase Of PPE")
+            free_cash_flow = {
+                date: (round(ocf[date] + capex[date], 2) if ocf.get(date) is not None and capex.get(date) is not None else None)
+                for date in ocf
+            }
+            financials_history["cash_flow"] = {
+                "operating_cash_flow": ocf,
+                "free_cash_flow": free_cash_flow,
+            }
+        else:
+            financials_history["cash_flow"] = {}
+
+        if fundamental_data and fundamental_data.get("status") == "success":
+            fundamentals = fundamental_data.get("fundamentals", {})
+            financials_history["ratios"] = fundamentals.get("fundamentals", {})
+        else:
+            financials_history["ratios"] = {}
+
+        charts_data["financials_history"] = financials_history
     except Exception as exc:
         logger.warning(f"Failed to extract financials chart data: {exc}")
 

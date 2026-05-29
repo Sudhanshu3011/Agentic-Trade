@@ -53,7 +53,9 @@ export function FundamentalChart({ data }: { data?: FinancialsHistory }) {
   }
 
   // Get chronological years list
-  const dates = Object.keys(data.income_stmt.revenue || {}).sort();
+  const dates = Object.keys(data.income_stmt.revenue || {})
+    .filter((dateStr) => data.income_stmt.revenue![dateStr] !== null)
+    .sort();
   if (dates.length === 0) {
     return (
       <Card className="mb-6 border-[var(--border)] bg-white shadow-xs">
@@ -71,21 +73,21 @@ export function FundamentalChart({ data }: { data?: FinancialsHistory }) {
     return {
       date: dateStr,
       year: yearLabel,
-      revenue: data.income_stmt.revenue?.[dateStr] ?? 0,
-      netIncome: data.income_stmt.net_income?.[dateStr] ?? 0,
-      debtToEquity: data.ratios.debt_to_equity?.[dateStr] ?? 0,
-      netMargin: data.ratios.net_margin_pct?.[dateStr] ?? 0,
-      roe: data.ratios.roe_pct?.[dateStr] ?? 0,
+      revenue: data.income_stmt.revenue?.[dateStr] ?? null,
+      netIncome: data.income_stmt.net_income?.[dateStr] ?? null,
+      debtToEquity: data.ratios.debt_to_equity?.[dateStr] ?? null,
+      netMargin: data.ratios.net_margin_pct?.[dateStr] ?? null,
+      roe: data.ratios.roe_pct?.[dateStr] ?? null,
     };
   });
 
   const formatValue = (num: number) => {
     const absVal = Math.abs(num);
     if (absVal >= 1e7) {
-      return `₹${(num / 1e7).toFixed(2)} Cr`;
+      return `₹${(num / 1e7).toFixed(2)}\u00A0Cr`;
     }
     if (absVal >= 1e5) {
-      return `₹${(num / 1e5).toFixed(2)} L`;
+      return `₹${(num / 1e5).toFixed(2)}\u00A0L`;
     }
     return `₹${num.toLocaleString()}`;
   };
@@ -125,6 +127,7 @@ export function FundamentalChart({ data }: { data?: FinancialsHistory }) {
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={formatValue}
+                  width={90}
                   tick={{ fill: "var(--muted-foreground)", fontSize: 10, fontFamily: "monospace" }}
                 />
                 <Tooltip
