@@ -46,7 +46,7 @@ export interface AnalyseResponse {
   };
 }
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE_URL = "http://localhost:8000";
 
 export function normalizeTicker(ticker: string) {
   let cleanTicker = ticker.trim().toUpperCase();

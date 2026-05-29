@@ -155,8 +155,6 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
   if (loading || !data) return <LoadingScreen ticker={ticker} />;
 
   // ── Dashboard ──────────────────────────────────────────────────────────
-  const isError = data.status && !["success"].includes(data.status);
-
   return (
     <div className="flex h-screen flex-col">
       {/* Navbar */}
@@ -165,7 +163,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
           <img 
             src="/navbar.png" 
             alt="Artha Analytics" 
-            className="h-13 object-contain" 
+            className="h-14 object-contain" 
           />
         </div>
         <div className="font-mono text-[13px] text-[var(--muted-foreground)]">
@@ -185,19 +183,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
         <Sidebar active={view} onSelect={setView} />
 
         <main className="flex-1 overflow-y-auto bg-[var(--background)] p-8">
-          {isError ? (
-            <div className="mx-auto max-w-[920px] border border-[var(--sell)] bg-white p-6 rounded-xl shadow-sm">
-              <p className="font-mono text-[11px] tracking-wider text-[var(--sell)]">
-                STATUS: {data.status}
-              </p>
-              <p className="mt-2 text-[14px] text-[var(--foreground)]">
-                The backend returned a non-success status. Reports may be
-                incomplete.
-              </p>
-            </div>
-          ) : (
-            <ViewSwitch view={view} data={data} />
-          )}
+          <ViewSwitch view={view} data={data} />
         </main>
       </div>
     </div>

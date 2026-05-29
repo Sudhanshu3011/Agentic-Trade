@@ -7,10 +7,10 @@ from tools.chart_tools import extract_charts_data
 import json
 
 
-def process_prefetch_result(raw_data: dict) -> tuple[dict, dict]:
+def process_prefetch_result(raw_data: dict) -> dict:
     """
     Process the raw data fetched in the prefetch step to extract relevant information
-    for each analyst. Make the raw_bundlle to the structired format expected by the analysts.
+    for each analyst. Make the raw_bundlle to the structured format expected by the analysts.
     This function serves as a bridge between the raw data collection and the structured analysis stages.
     """
     processed_bundle = {}
@@ -34,8 +34,9 @@ def process_prefetch_result(raw_data: dict) -> tuple[dict, dict]:
     )
 
     charts_data = extract_charts_data(raw_data, processed_bundle["fundamental_data"])
+    processed_bundle["charts_data"] = charts_data
 
     # with open("data.json",'w+') as f:
     #     json.dump(processed_bundle,f,indent=2)
 
-    return processed_bundle, charts_data
+    return processed_bundle

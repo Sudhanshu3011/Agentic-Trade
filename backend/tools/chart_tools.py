@@ -48,7 +48,9 @@ def extract_charts_data(raw_data: dict, fundamental_data: dict) -> Optional[dict
                     return None
 
             technical_history = []
-            for i in range(len(df)):
+            limit = min(120, len(df))
+            start_idx = len(df) - limit
+            for i in range(start_idx, len(df)):
                 row = {
                     "date": str(df.index[i].date()) if hasattr(df.index[i], "date") else str(df.index[i]),
                     "close": _safe(close.iloc[i]),
@@ -61,7 +63,7 @@ def extract_charts_data(raw_data: dict, fundamental_data: dict) -> Optional[dict
                     "volume": _safe(volume.iloc[i]) if len(volume) > i else None,
                 }
                 technical_history.append(row)
-            charts_data["technical_history"] = technical_history[-120:]
+            charts_data["technical_history"] = technical_history
     except Exception as exc:
         logger.warning(f"Failed to extract technical chart data: {exc}")
         charts_data["technical_history"] = []
@@ -98,7 +100,7 @@ def extract_charts_data(raw_data: dict, fundamental_data: dict) -> Optional[dict
             ocf = _df_row(cash_flow_df, "Operating Cash Flow", "Cash Flow From Continuing Operating Activities")
             capex = _df_row(cash_flow_df, "Capital Expenditure", "Purchase Of PPE")
             free_cash_flow = {
-                date: (round(ocf[date] + capex[date], 2) if ocf.get(date) is not None and capex.get(date) is not None else None)
+                date: (round(ocf[date] - abs(capex[date]), 2) if ocf.get(date) is not None and capex.get(date) is not None else None)
                 for date in ocf
             }
             financials_history["cash_flow"] = {

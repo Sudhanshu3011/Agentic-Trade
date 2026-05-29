@@ -300,8 +300,6 @@ const STEPS = [
   "Running technical analysis",
   "Evaluating fundamentals",
   "Scanning market & sector data",
-  "Bull-Bear debate in session...",
-  "Manager reviewing verdict",
 ];
 
 function LoadingPanel({ ticker }: { ticker: string }) {
