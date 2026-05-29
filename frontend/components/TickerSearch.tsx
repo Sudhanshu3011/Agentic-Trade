@@ -181,15 +181,14 @@ export function TickerSearch() {
           fadeOutIntro ? "opacity-100 scale-100" : "opacity-0 scale-95"
         }`}
       >
-        <div className="w-full max-w-[480px]">
-          <div className="mb-12 text-center">
-            <h1 className="font-mono text-[13px] tracking-widest text-[var(--foreground)]">
-              ARTHA ANALYTICS
-            </h1>
-            <div className="mx-auto my-3 h-px w-full bg-[var(--border)]" />
-            <p className="text-[13px] text-[var(--muted-foreground)]">
-              AI-powered equity analytics for Indian markets
-            </p>
+        <div className="w-full max-w-[420px]">
+          {/* Landing Page Hero Logo */}
+          <div className="mb-6 flex justify-center">
+            <img 
+              src="/landing_hero.png" 
+              alt="Artha Analytics Logo" 
+              className="w-60 h-60 object-contain" 
+            />
           </div>
 
           {/* Groq API Key input */}

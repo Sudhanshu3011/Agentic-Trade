@@ -125,7 +125,7 @@ function buildErrorMessage(status: number, detail: BackendErrorDetail): { title:
   // Everything else → internal server error
   return {
     title: "SOMETHING WENT WRONG",
-    message: "The analysis server encountered an unexpected error while processing your request. This is usually a temporary issue on our end.",
+    message: serverMsg || "The analysis server encountered an unexpected error while processing your request. This is usually a temporary issue on our end.",
   };
 }
 

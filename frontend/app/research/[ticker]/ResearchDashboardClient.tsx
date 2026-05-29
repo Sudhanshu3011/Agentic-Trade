@@ -160,9 +160,13 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
   return (
     <div className="flex h-screen flex-col">
       {/* Navbar */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] bg-white px-5">
-        <div className="font-mono text-[13px] tracking-wider text-[var(--foreground)]">
-          ARTHA ANALYTICS
+      <header className="flex h-16 shrink-0 items-center justify-between border-b border-[var(--border)] bg-white px-5">
+        <div className="flex items-center">
+          <img 
+            src="/navbar.png" 
+            alt="Artha Analytics" 
+            className="h-13 object-contain" 
+          />
         </div>
         <div className="font-mono text-[13px] text-[var(--muted-foreground)]">
           {data.ticker.split(".")[0].toUpperCase()}.NS · NSE
