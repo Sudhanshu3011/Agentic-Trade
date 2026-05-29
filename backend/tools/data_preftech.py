@@ -118,7 +118,7 @@ def prefetch_ticker_bundle(ticker: str) -> dict:
 
                     df = yf.download(
                         ticker,
-                        period="1y",
+                        period="2y",
                         interval="1d",
                         auto_adjust=True,
                         progress=False,

@@ -70,14 +70,20 @@ export function FundamentalChart({ data }: { data?: FinancialsHistory }) {
   const chartData = dates.map((dateStr) => {
     const yearStr = dateStr.split("-")[0];
     const yearLabel = `FY${yearStr.slice(2)}`;
+    const netMarginVal = data.ratios.net_margin_pct?.[dateStr] ?? null;
+    const roeVal = data.ratios.roe_pct?.[dateStr] ?? null;
+
     return {
       date: dateStr,
       year: yearLabel,
       revenue: data.income_stmt.revenue?.[dateStr] ?? null,
       netIncome: data.income_stmt.net_income?.[dateStr] ?? null,
       debtToEquity: data.ratios.debt_to_equity?.[dateStr] ?? null,
-      netMargin: data.ratios.net_margin_pct?.[dateStr] ?? null,
-      roe: data.ratios.roe_pct?.[dateStr] ?? null,
+      netMargin: netMarginVal,
+      roe: roeVal,
+      // Cap at [-100, 100] for visual charting to prevent outliers from squishing the scale
+      plotNetMargin: netMarginVal !== null ? Math.max(-100, Math.min(100, netMarginVal)) : null,
+      plotRoe: roeVal !== null ? Math.max(-100, Math.min(100, roeVal)) : null,
     };
   });
 
@@ -184,6 +190,20 @@ export function FundamentalChart({ data }: { data?: FinancialsHistory }) {
                   tick={{ fill: "var(--muted-foreground)", fontSize: 10, fontFamily: "monospace" }}
                 />
                 <Tooltip
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  formatter={(value: any, name: string, props: any) => {
+                    const dataRow = props.payload;
+                    if (name === "Net Margin %") {
+                      return [dataRow.netMargin !== null ? `${dataRow.netMargin}%` : "N/A", name];
+                    }
+                    if (name === "ROE %") {
+                      return [dataRow.roe !== null ? `${dataRow.roe}%` : "N/A", name];
+                    }
+                    if (name === "Debt-to-Equity") {
+                      return [dataRow.debtToEquity !== null ? `${dataRow.debtToEquity}x` : "N/A", name];
+                    }
+                    return [value, name];
+                  }}
                   contentStyle={{
                     background: "white",
                     border: "1px solid var(--border)",
@@ -203,7 +223,7 @@ export function FundamentalChart({ data }: { data?: FinancialsHistory }) {
                   yAxisId="left"
                   name="Net Margin %"
                   type="monotone"
-                  dataKey="netMargin"
+                  dataKey="plotNetMargin"
                   stroke="#ef4444"
                   strokeWidth={2}
                   dot={{ r: 4 }}
@@ -212,7 +232,7 @@ export function FundamentalChart({ data }: { data?: FinancialsHistory }) {
                   yAxisId="left"
                   name="ROE %"
                   type="monotone"
-                  dataKey="roe"
+                  dataKey="plotRoe"
                   stroke="#d97706"
                   strokeWidth={2}
                   dot={{ r: 4 }}

@@ -61,8 +61,7 @@ def extract_charts_data(raw_data: dict, fundamental_data: dict) -> Optional[dict
                     "volume": _safe(volume.iloc[i]) if len(volume) > i else None,
                 }
                 technical_history.append(row)
-
-            charts_data["technical_history"] = technical_history
+            charts_data["technical_history"] = technical_history[-120:]
     except Exception as exc:
         logger.warning(f"Failed to extract technical chart data: {exc}")
         charts_data["technical_history"] = []
