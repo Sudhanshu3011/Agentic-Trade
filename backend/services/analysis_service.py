@@ -24,6 +24,7 @@ class AnalysisService:
     # Keeping cache in-memory as per user request
     _cache = {
         "nse_symbols": set(),
+        "nse_tickers": [],
         "loaded_at": 0,
     }
     _cache_lock = threading.Lock()
@@ -32,18 +33,29 @@ class AnalysisService:
     def __init__(self, analysis_repository: AnalysisRepository):
         self.analysis_repository = analysis_repository
 
-    def _load_nse_symbols(self) -> set[str]:
+    def _load_nse_symbols(self) -> tuple[set[str], list[dict[str, str]]]:
         try:
             headers = {"User-Agent": "Mozilla/5.0"}
             resp = requests.get(self.NSE_LIST_URL, headers=headers, timeout=15)
             resp.raise_for_status()
             df = pd.read_csv(StringIO(resp.text))
-            symbols = set(df["SYMBOL"].astype(str).str.strip().str.upper())
+            df.columns = df.columns.str.strip()
+
+            symbols = set()
+            tickers = []
+            for _, row in df.iterrows():
+                sym = str(row["SYMBOL"]).strip().upper()
+                name = str(row.get("NAME OF COMPANY", sym)).strip()
+                if sym:
+                    symbols.add(sym)
+                    tickers.append({"symbol": sym, "name": name})
+
+            tickers.sort(key=lambda x: x["symbol"])
             logger.info(f"NSE symbols loaded: {len(symbols)}")
-            return symbols
+            return symbols, tickers
         except Exception as exc:
             logger.exception(f"NSE symbol fetch failed: {exc}")
-            return set()
+            return set(), []
 
     def _refresh_cache_if_stale(self) -> None:
         with self._cache_lock:
@@ -51,7 +63,9 @@ class AnalysisService:
             if age < self._CACHE_TTL_SEC and self._cache["nse_symbols"]:
                 return
             logger.info("Refreshing ticker symbol cache...")
-            self._cache["nse_symbols"] = self._load_nse_symbols()
+            symbols, tickers = self._load_nse_symbols()
+            self._cache["nse_symbols"] = symbols
+            self._cache["nse_tickers"] = tickers
             self._cache["loaded_at"] = time.time()
             logger.info(
                 f"Ticker cache refreshed | NSE={len(self._cache['nse_symbols'])}"
@@ -59,6 +73,11 @@ class AnalysisService:
 
     def pre_warm_cache(self) -> None:
         self._refresh_cache_if_stale()
+
+    async def get_nse_tickers(self) -> list[dict[str, str]]:
+        await asyncio.to_thread(self._refresh_cache_if_stale)
+        return self._cache.get("nse_tickers", [])
+
 
     def validate_ticker_format(self, ticker: str) -> None:
         if not ticker or not ticker.strip():

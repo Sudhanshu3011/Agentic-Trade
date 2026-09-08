@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
-import { Search, Menu } from "lucide-react";
+import { Search, Menu, Bookmark, Check, X } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   analyseTicker,
@@ -14,8 +15,11 @@ import {
   getAuthToken,
   getSavedOpenRouterApiKey,
   saveOpenRouterApiKey,
+  saveAnalysis,
+  isAnalysisSaved,
   type AnalyseResponse,
 } from "@/lib/api";
+
 import { LoadingView } from "@/components/research/LoadingView";
 import { AppSidebar, type ViewKey } from "@/components/layout/AppSidebar";
 import { ReportView } from "@/components/research/ReportView";
@@ -57,8 +61,49 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
   const [loading, setLoading] = useState(true);
   const [retryCount, setRetryCount] = useState(0);
   const [mounted, setMounted] = useState(false);
+  const [isSaved, setIsSaved] = useState(() => isAnalysisSaved(ticker));
+  const [saving, setSaving] = useState(false);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
 
   const mainRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const saved = isAnalysisSaved(ticker);
+    setIsSaved(saved);
+    if (!saved) {
+      setShowSavePrompt(true);
+    }
+  }, [ticker]);
+
+  useEffect(() => {
+    if (showSavePrompt) {
+      const timer = setTimeout(() => {
+        setShowSavePrompt(false);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSavePrompt]);
+
+
+  const handleSaveResearch = async () => {
+    if (!data || isSaved || saving) return;
+    const token = getAuthToken();
+    if (!token) {
+      router.push("/search");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveAnalysis({ data, authToken: token });
+      setIsSaved(true);
+    } catch (err) {
+      console.error("Failed to save research", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
 
   useEffect(() => {
     setMounted(true);
@@ -118,7 +163,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
         if (e instanceof AnalysisError) {
           if (e.title === "SIGN IN REQUIRED") {
             clearAuthSession();
-            router.replace("/search");
+            router.replace("/search?auth=true");
             return;
           }
           if (e.title === "INVALID API KEY") {
@@ -247,7 +292,31 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
         <div className="hidden sm:block font-mono text-[13px] text-[var(--muted-foreground)]">
           {data.ticker.split(".")[0].toUpperCase()}.NS · NSE
         </div>
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            type="button"
+            onClick={handleSaveResearch}
+            disabled={isSaved || saving}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full border transition-all text-[11px] sm:text-[13px] font-semibold cursor-pointer shadow-sm ${
+              isSaved
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700 cursor-default"
+                : "border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 hover:shadow-md hover:scale-105 active:scale-95"
+            }`}
+            title={isSaved ? "Saved to Past Analysis" : "Save Research to Past Analysis"}
+          >
+            {isSaved ? (
+              <>
+                <Check size={14} className="text-emerald-600 shrink-0" />
+                <span>Saved</span>
+              </>
+            ) : (
+              <>
+                <Bookmark size={14} className="text-amber-700 shrink-0" />
+                <span>{saving ? "Saving..." : "Save Research"}</span>
+              </>
+            )}
+          </button>
+
           <Link
             href="/search"
             className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-b from-zinc-800 to-zinc-950 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] font-sans text-[11px] sm:text-[13px] font-medium text-white transition-all hover:scale-105 hover:from-zinc-700 hover:to-zinc-950 hover:shadow-md active:scale-95 cursor-pointer"
@@ -257,6 +326,54 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
           </Link>
         </div>
       </header>
+
+      {/* Floating Save Prompt Pop-up */}
+      <AnimatePresence>
+        {!isSaved && showSavePrompt && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="print:hidden fixed bottom-5 right-5 z-50 flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/90 p-3.5 shadow-2xl backdrop-blur-xl max-w-md text-zinc-100"
+          >
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <Bookmark size={18} />
+            </div>
+
+            <div className="flex-1 text-left">
+              <p className="text-[12px] font-medium leading-snug text-zinc-200">
+                Save this report to view anytime in <strong className="text-amber-400 font-semibold">Past Analysis</strong>.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  handleSaveResearch();
+                  setShowSavePrompt(false);
+                }}
+                disabled={saving}
+                className="flex items-center gap-1 rounded-full bg-amber-400 hover:bg-amber-300 text-zinc-950 px-3.5 py-1.5 text-[11px] font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-md"
+              >
+                {saving ? "Saving..." : "Save Now"}
+              </button>
+
+              <button
+                onClick={() => setShowSavePrompt(false)}
+                className="p-1 text-zinc-400 hover:text-white transition-colors cursor-pointer rounded-full hover:bg-zinc-800"
+                aria-label="Dismiss"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+
+
+
 
       {isMobile && (
         <div className="print:hidden flex overflow-x-auto border-b border-[var(--border)] bg-white px-2 py-2 hide-scrollbar">

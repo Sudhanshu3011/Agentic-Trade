@@ -118,21 +118,20 @@ export function AppGate() {
           fadeOutIntro ? "scale-100 opacity-100" : "scale-95 opacity-0"
         }`}
       >
-        {user ? (
-          <SearchView user={user} onLogout={handleLogout} />
-        ) : (
-          <>
-            <SearchView onLoginClick={() => setShowAuth(true)} />
-            {showAuth && (
-              <AuthCard
-                onAuthed={handleAuthed}
-                onClose={() => {
-                  setShowAuth(false);
-                  setAuthError(null);
-                }}
-              />
-            )}
-          </>
+        <SearchView
+          user={user || undefined}
+          onLogout={handleLogout}
+          onLoginClick={() => setShowAuth(true)}
+        />
+        {showAuth && (
+          <AuthCard
+            initialError={authError}
+            onAuthed={handleAuthed}
+            onClose={() => {
+              setShowAuth(false);
+              setAuthError(null);
+            }}
+          />
         )}
       </div>
       <Toaster richColors position="top-center" />

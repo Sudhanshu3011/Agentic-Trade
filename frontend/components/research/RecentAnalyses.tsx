@@ -37,8 +37,20 @@ export function RecentAnalyses({ user, inModal = false }: { user: AuthUser, inMo
   if (!user || loading) return null;
 
   if (history.length === 0) {
+    if (inModal) {
+      return (
+        <div className="py-12 text-center text-zinc-500">
+          <Clock size={32} className="mx-auto mb-3 text-zinc-300" />
+          <p className="font-semibold text-zinc-700 text-[15px]">No Saved Research Yet</p>
+          <p className="mt-1 text-[13px] text-zinc-400 max-w-sm mx-auto">
+            Click <strong className="text-zinc-600">"Save Research"</strong> on any stock report page to save it here for future viewing.
+          </p>
+        </div>
+      );
+    }
     return null;
   }
+
 
   return (
     <div className={`${inModal ? "mt-2" : "mt-10"} w-full animate-[fadeIn_0.5s_ease-out]`}>
