@@ -1,8 +1,10 @@
+import os
 import asyncio
 from typing import Optional
 from fastapi import APIRouter, Depends, Request, Header, Response, HTTPException
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+
 
 from api.models import (
     AuthRequest,
@@ -78,7 +80,14 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "127.0.0.1"
 
 
-def _set_refresh_cookie(response: Response, refresh_token: str):
+def _set_refresh_cookie(response: Response, refresh_token: str, request: Request | None = None):
+    is_secure = False
+    if request:
+        proto = request.headers.get("x-forwarded-proto", request.url.scheme).lower()
+        is_secure = proto == "https"
+    else:
+        is_secure = os.getenv("ENVIRONMENT", "development").lower() in ("production", "prod")
+
     response.set_cookie(
         key=REFRESH_COOKIE_NAME,
         value=refresh_token,
@@ -86,9 +95,8 @@ def _set_refresh_cookie(response: Response, refresh_token: str):
         max_age=COOKIE_MAX_AGE,
         path="/auth",
         samesite="lax",
-        secure=False,  # Set to True if running behind HTTPS in production
+        secure=is_secure,
     )
-
 
 
 @router.get("/health")
@@ -119,7 +127,7 @@ async def signup(
     access_token, refresh_token, user_doc = await auth_service.signup_user(
         body.email, body.password, body.name
     )
-    _set_refresh_cookie(response, refresh_token)
+    _set_refresh_cookie(response, refresh_token, request)
     user = AuthUser(
         id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
     )
@@ -135,7 +143,7 @@ async def login(
     auth_service: AuthService = Depends(get_auth_service),
 ):
     access_token, refresh_token, user_doc = await auth_service.login_user(body.email, body.password)
-    _set_refresh_cookie(response, refresh_token)
+    _set_refresh_cookie(response, refresh_token, request)
     user = AuthUser(
         id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
     )
@@ -151,7 +159,7 @@ async def google_auth(
     auth_service: AuthService = Depends(get_auth_service),
 ):
     access_token, refresh_token, user_doc = await auth_service.authenticate_google_user(body.credential_token)
-    _set_refresh_cookie(response, refresh_token)
+    _set_refresh_cookie(response, refresh_token, request)
     user = AuthUser(
         id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
     )
@@ -186,12 +194,13 @@ async def refresh_token_route(
     email = user_row["email"]
 
     new_access_token, new_refresh_token = auth_service.create_tokens(user_id, email)
-    _set_refresh_cookie(response, new_refresh_token)
+    _set_refresh_cookie(response, new_refresh_token, request)
 
     user = AuthUser(
         id=user_id, email=email, name=user_row.get("name")
     )
     return AuthResponse(token=new_access_token, user=user)
+
 
 
 @router.post("/auth/logout")
