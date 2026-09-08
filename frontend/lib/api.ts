@@ -35,6 +35,12 @@ export interface AnalysisSummary {
   status: string;
 }
 
+export interface Ticker {
+  symbol: string;
+  name: string;
+}
+
+
 export interface AnalyseResponse {
   ticker: string;
   news_report: any;
@@ -51,7 +57,7 @@ export interface AnalyseResponse {
   indian_news?: any;
   global_news?: any;
   historical_prices?: any[];
-  
+
   bull_thesis?: ThesisOutput | null;
   bear_thesis?: ThesisOutput | null;
   verdict?: Verdict | null;
@@ -216,12 +222,14 @@ function buildErrorMessage(
     };
   }
 
-  // Everything else → internal server error
+  // Everything else → internal server error / analysis failure
   return {
-    title: "SERVER OVERLOADED OR ERROR",
-    message: "The server encountered an unexpected error or is currently processing too many requests. Please try again later.",
+    title: "ANALYSIS TEMPORARILY UNAVAILABLE",
+    message: serverMsg || "Our AI analysis engine encountered a temporary issue while compiling report data. Please click Retry or try again in a moment.",
   };
 }
+
+
 
 // ── Main analysis function ─────────────────────────────────────────────────────
 
@@ -257,7 +265,7 @@ export async function analyseTicker({
 
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await fetchWithAuth(url, {
       method: "POST",
       headers,
       body: JSON.stringify({ ticker: cleanTicker, include_debate, thinking_mode }),
@@ -271,6 +279,7 @@ export async function analyseTicker({
         "Unable to reach the authentication server.",
     });
   }
+
 
   const rawData = await res.json();
 
@@ -305,9 +314,43 @@ export async function analyseTicker({
   return data;
 }
 
-export async function getAnalysisHistory(authToken: string): Promise<AnalysisSummary[]> {
+const HISTORY_CACHE_KEY = "arbor:past_analysis_history";
+const HISTORY_DETAIL_KEY = (id: string) => `arbor:history_detail:${id}`;
+
+export function readCachedHistory(): AnalysisSummary[] | null {
+  try {
+    const raw = sessionStorage.getItem(HISTORY_CACHE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as AnalysisSummary[];
+  } catch {
+    return null;
+  }
+}
+
+export function cacheHistory(data: AnalysisSummary[]) {
+  try {
+    sessionStorage.setItem(HISTORY_CACHE_KEY, JSON.stringify(data));
+  } catch { }
+}
+
+export function clearHistoryCache() {
+  try {
+    sessionStorage.removeItem(HISTORY_CACHE_KEY);
+  } catch { }
+}
+
+export async function getAnalysisHistory(
+  authToken: string,
+  bypassCache: boolean = false
+): Promise<AnalysisSummary[]> {
+
+  if (!bypassCache) {
+    const cached = readCachedHistory();
+    if (cached) return cached;
+  }
+
   const url = `${API_BASE_URL}/analyses/history`;
-  const res = await fetch(url, {
+  const res = await fetchWithAuth(url, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -319,21 +362,107 @@ export async function getAnalysisHistory(authToken: string): Promise<AnalysisSum
     throw new Error("Failed to fetch analysis history");
   }
 
+  const data: AnalysisSummary[] = await res.json();
+  cacheHistory(data);
+  return data;
+}
+
+export async function getTickers(): Promise<Ticker[]> {
+  const url = `${API_BASE_URL}/tickers`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to fetch tickers from API");
+  }
+
   return res.json();
 }
+
+export interface SaveAnalysisResponse {
+  status: string;
+  analysis_id: string;
+  message: string;
+}
+
+export async function saveAnalysis({
+  data,
+  authToken,
+}: {
+  data: AnalyseResponse;
+  authToken: string;
+}): Promise<SaveAnalysisResponse> {
+  const url = `${API_BASE_URL}/analyses/save`;
+  const res = await fetchWithAuth(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    let detail: BackendErrorDetail = {};
+    try {
+      const err = await res.json();
+      detail = err.detail || err || {};
+    } catch { }
+    throw new AnalysisError({
+      title: "SAVE FAILED",
+      message: detail.message || "Failed to save analysis to history.",
+    });
+  }
+
+  const result: SaveAnalysisResponse = await res.json();
+  markAnalysisSaved(data.ticker);
+  clearHistoryCache();
+  return result;
+}
+
+export function isAnalysisSaved(ticker: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const saved = localStorage.getItem(`saved_analysis_${normalizeTicker(ticker)}`);
+    return !!saved;
+  } catch {
+    return false;
+  }
+}
+
+export function markAnalysisSaved(ticker: string) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(`saved_analysis_${normalizeTicker(ticker)}`, "true");
+  } catch { }
+}
+
+
 
 export async function getAnalysisById(
   analysisId: string,
   authToken: string
 ): Promise<AnalyseResponse> {
+  try {
+    const raw = sessionStorage.getItem(HISTORY_DETAIL_KEY(analysisId));
+    if (raw) {
+      return JSON.parse(raw) as AnalyseResponse;
+    }
+  } catch { }
+
   const url = `${API_BASE_URL}/analyses/${analysisId}`;
-  const res = await fetch(url, {
+  const res = await fetchWithAuth(url, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${authToken}`,
     },
   });
+
 
   if (!res.ok) {
     if (res.status === 404) {
@@ -367,36 +496,146 @@ export async function getAnalysisById(
     charts_data: rawData.charts_data,
   };
 
+  try {
+    sessionStorage.setItem(HISTORY_DETAIL_KEY(analysisId), JSON.stringify(data));
+  } catch { }
+
   return data;
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// ── Auth & Interceptor ────────────────────────────────────────────────────────
+
+let refreshPromise: Promise<string | null> | null = null;
+
+export async function refreshTokenSilently(): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        clearAuthSession(false);
+        return null;
+      }
+
+      const data: AuthResponse = await res.json();
+      saveAuthSession(data);
+      return data.token;
+    } catch {
+      clearAuthSession(false);
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+export async function fetchWithAuth(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const options: RequestInit = {
+    ...init,
+    credentials: "include",
+  };
+
+  const headers = new Headers(options.headers || {});
+  const currentToken = getAuthToken();
+  if (currentToken && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${currentToken}`);
+  }
+  options.headers = headers;
+
+  let res = await fetch(input, options);
+
+  if (res.status === 401) {
+    const clone = res.clone();
+    try {
+      const body = await clone.json();
+      const errorCode = body?.detail?.error || body?.error;
+      if (errorCode === "invalid_token" || errorCode === "session_expired") {
+        const newToken = await refreshTokenSilently();
+        if (newToken) {
+          const retryHeaders = new Headers(options.headers || {});
+          retryHeaders.set("Authorization", `Bearer ${newToken}`);
+          options.headers = retryHeaders;
+          res = await fetch(input, options);
+        }
+      }
+    } catch { }
+  }
+
+  return res;
+}
 
 export function saveAuthSession(session: AuthResponse) {
-  const expires = new Date();
-  expires.setTime(expires.getTime() + 7 * 24 * 60 * 60 * 1000);
-  document.cookie = `${AUTH_TOKEN_KEY}=${session.token}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
-  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(session.user));
-}
-
-export function clearAuthSession() {
-  document.cookie = `${AUTH_TOKEN_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
-  localStorage.removeItem(AUTH_USER_KEY);
-}
-
-export function getAuthToken() {
-  if (typeof document === "undefined") return "";
-  const nameEQ = `${AUTH_TOKEN_KEY}=`;
-  const ca = document.cookie.split(";");
-  for (let i = 0; i < ca.length; i++) {
-    let c = ca[i];
-    while (c.charAt(0) === " ") c = c.substring(1, c.length);
-    if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(AUTH_TOKEN_KEY, session.token);
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(session.user));
+    } catch { }
+    try {
+      const expires = new Date();
+      expires.setTime(expires.getTime() + 7 * 24 * 60 * 60 * 1000);
+      document.cookie = `${AUTH_TOKEN_KEY}=${session.token}; expires=${expires.toUTCString()}; path=/; SameSite=Lax`;
+    } catch { }
   }
+}
+
+export function clearAuthSession(callLogoutApi: boolean = true) {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(AUTH_USER_KEY);
+    } catch { }
+    try {
+      document.cookie = `${AUTH_TOKEN_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+    } catch { }
+    if (callLogoutApi) {
+      try {
+        fetch(`${API_BASE_URL}/auth/logout`, {
+          method: "POST",
+          credentials: "include",
+        }).catch(() => {});
+      } catch { }
+    }
+  }
+}
+
+export function getAuthToken(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (token && token.trim()) return token.trim();
+  } catch { }
+
+  try {
+    const nameEQ = `${AUTH_TOKEN_KEY}=`;
+    const ca = document.cookie.split(";");
+    for (let i = 0; i < ca.length; i++) {
+      let c = ca[i];
+      while (c.charAt(0) === " ") c = c.substring(1, c.length);
+      if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+  } catch { }
+
   return "";
 }
 
 export function getAuthUser(): AuthUser | null {
+  if (typeof window === "undefined") return null;
+  const token = getAuthToken();
+  if (!token) return null;
+
   try {
     const raw = localStorage.getItem(AUTH_USER_KEY);
     return raw ? (JSON.parse(raw) as AuthUser) : null;
@@ -462,6 +701,7 @@ export async function authRequest({
     res = await fetch(`${API_BASE_URL}/auth/${mode}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ email, password, name }),
     });
   } catch {
@@ -472,16 +712,38 @@ export async function authRequest({
   }
 
   if (!res.ok) {
-    let detail: BackendErrorDetail = {};
+    let errorMessage = "";
     try {
       const errorBody = await res.json();
-      detail = errorBody?.detail ?? errorBody ?? {};
+      if (typeof errorBody.detail === "string") {
+        errorMessage = errorBody.detail;
+      } else if (Array.isArray(errorBody.detail) && errorBody.detail.length > 0) {
+        const firstErr = errorBody.detail[0];
+        errorMessage = typeof firstErr === "string" 
+          ? firstErr 
+          : (firstErr?.msg ? firstErr.msg.replace(/^Value error,\s*/i, "") : "");
+      } else if (typeof errorBody.detail === "object" && errorBody.detail?.message) {
+        errorMessage = errorBody.detail.message;
+      } else if (typeof errorBody.message === "string") {
+        errorMessage = errorBody.message;
+      }
     } catch { }
+
+    if (!errorMessage) {
+      if (res.status === 409) {
+        errorMessage = "An account with this email already exists. Please switch to LOGIN.";
+      } else if (mode === "signup") {
+        errorMessage = "Failed to create account. Please check your details and try again.";
+      } else {
+        errorMessage = "Please check your email and password, then try again.";
+      }
+    } else if (res.status === 409 && !errorMessage.includes("LOGIN")) {
+      errorMessage = `${errorMessage} Please switch to the LOGIN tab to sign in.`;
+    }
+
     throw new AnalysisError({
       title: res.status === 409 ? "ACCOUNT EXISTS" : "AUTHENTICATION FAILED",
-      message:
-        detail.message ||
-        "Please check your email and password, then try again.",
+      message: errorMessage,
     });
   }
 
@@ -494,6 +756,7 @@ export async function authenticateWithGoogle(credentialToken: string): Promise<A
     res = await fetch(`${API_BASE_URL}/auth/google`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ credential_token: credentialToken }),
     });
   } catch {
@@ -527,7 +790,7 @@ export async function changePassword({
 }): Promise<{ status: string; message: string }> {
   let res: Response;
   try {
-    res = await fetch(`${API_BASE_URL}/auth/change-password`, {
+    res = await fetchWithAuth(`${API_BASE_URL}/auth/change-password`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -575,7 +838,7 @@ export async function verifyOpenRouterApiKey({
     headers.Authorization = `Bearer ${authToken}`;
   }
   try {
-    res = await fetch(`${API_BASE_URL}/auth/verify-openrouter-key`, {
+    res = await fetchWithAuth(`${API_BASE_URL}/auth/verify-openrouter-key`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -603,6 +866,7 @@ export async function verifyOpenRouterApiKey({
 
   return res.json();
 }
+
 
 // ── Session cache ──────────────────────────────────────────────────────────────
 

@@ -19,16 +19,18 @@ const colTrans = (delay = 0) => ({
 export function AuthCard({
   onAuthed,
   onClose,
+  initialError,
 }: {
   onAuthed: (user: AuthUser) => void;
   onClose?: () => void;
+  initialError?: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError || null);
 
   const successCallbackRef = useRef<any>(null);
   useEffect(() => { successCallbackRef.current = handleGoogleSuccess; });
@@ -240,7 +242,19 @@ export function AuthCard({
 
             <div className="space-y-3 mt-5">
               {error && (
-                <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-xs font-semibold text-red-500 text-center tracking-wide">
+                <motion.p
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => {
+                    if (error.includes("LOGIN")) {
+                      setTab("login");
+                      setError(null);
+                    }
+                  }}
+                  className={`text-xs font-semibold text-red-500 text-center tracking-wide ${
+                    error.includes("LOGIN") ? "cursor-pointer hover:underline" : ""
+                  }`}
+                >
                   {error}
                 </motion.p>
               )}

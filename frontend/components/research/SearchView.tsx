@@ -7,7 +7,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { User, ArrowRight, Search, History } from "lucide-react";
 import { MdErrorOutline } from "react-icons/md";
-import { clearCached, getSavedOpenRouterApiKey, type AuthUser } from "@/lib/api";
+import { clearCached, getSavedOpenRouterApiKey, getTickers, type AuthUser, type Ticker } from "@/lib/api";
 import { LoadingView } from "./LoadingView";
 import { ProfileDialog } from "@/components/auth/ProfileDialog";
 import { BYOKModal } from "./BYOKModal";
@@ -15,11 +15,6 @@ import { Footer } from "@/components/layout/Footer";
 import { HistoryModal } from "./HistoryModal";
 
 let hasHydrated = false;
-
-interface Ticker {
-  symbol: string;
-  name: string;
-}
 
 export function SearchView({
   user,
@@ -58,11 +53,35 @@ export function SearchView({
   }, []);
 
   useEffect(() => {
-    fetch("/nse-tickers.json")
-      .then((r) => r.json())
-      .then(setTickers)
-      .catch(() => setTickers([]));
+    let isMounted = true;
+    getTickers()
+      .then((data) => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setTickers(data);
+        } else if (isMounted) {
+          fetchFallback();
+        }
+      })
+      .catch(() => {
+        if (isMounted) fetchFallback();
+      });
+
+    function fetchFallback() {
+      fetch("/nse-tickers.json")
+        .then((r) => r.json())
+        .then((data) => {
+          if (isMounted) setTickers(data);
+        })
+        .catch(() => {
+          if (isMounted) setTickers([]);
+        });
+    }
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
 
   const fuse = useMemo(
     () =>

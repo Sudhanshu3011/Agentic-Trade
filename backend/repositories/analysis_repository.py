@@ -24,7 +24,13 @@ class AnalysisRepository:
         try:
             doc["user_id"] = user_id
             doc["ticker"] = ticker
-            if "_id" not in doc:
+
+            existing = await self.analyses_collection.find_one(
+                {"user_id": user_id, "ticker": ticker}, {"_id": 1}
+            )
+            if existing:
+                doc["_id"] = existing["_id"]
+            elif "_id" not in doc:
                 doc["_id"] = ObjectId()
 
             await self.analyses_collection.replace_one(
