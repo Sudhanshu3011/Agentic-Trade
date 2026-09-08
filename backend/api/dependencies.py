@@ -61,11 +61,14 @@ async def get_current_user_optional(
         return None
 
     token = credentials.credentials
+    if not token or not token.strip():
+        return None
+
     try:
         claims = auth_service.verify_token(token)
         user_row = await user_repository.get_by_id(claims["sub"])
         if not user_row:
-            return None
+            raise InvalidTokenError("Session expired or user not found.")
 
         return AuthUser(
             id=str(user_row["_id"]),
@@ -73,4 +76,5 @@ async def get_current_user_optional(
             name=user_row.get("name"),
         )
     except Exception:
-        return None
+        raise InvalidTokenError("Your session has expired. Please sign in again.")
+

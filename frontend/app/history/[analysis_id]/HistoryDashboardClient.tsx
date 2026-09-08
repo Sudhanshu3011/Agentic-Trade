@@ -79,6 +79,10 @@ export default function HistoryDashboardClient({ analysisId }: { analysisId: str
       .catch((e) => {
         if (e.message === "Analysis not found") {
           setError({ title: "NOT FOUND", message: "This analysis does not exist or you do not have permission to view it." });
+        } else if (e.message?.includes("session") || e.message?.includes("SIGN IN REQUIRED") || e.message?.includes("expired")) {
+          clearAuthSession();
+          router.replace("/search?auth=true");
+          return;
         } else {
           setError({
             title: "SOMETHING WENT WRONG",
@@ -88,6 +92,7 @@ export default function HistoryDashboardClient({ analysisId }: { analysisId: str
         setLoading(false);
       });
   }, [analysisId, router]);
+
 
   if (!mounted) {
     return null;

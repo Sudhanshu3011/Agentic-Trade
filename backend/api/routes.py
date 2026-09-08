@@ -11,17 +11,24 @@ from api.models import (
     ChangePasswordRequest,
     GoogleAuthRequest,
     VerifyOpenRouterKeyRequest,
+    TickerItem,
     AnalyzeRequest,
     AnalyzeResponse,
     AnalysisSummary,
     AnalysisDetail,
+    SaveAnalysisRequest,
+    SaveAnalysisResponse,
 )
+
+
 from api.dependencies import (
     get_auth_service,
     get_analysis_service,
     get_current_user,
     get_current_user_optional,
+    get_user_repository,
 )
+from repositories.user_repository import UserRepository
 from services.auth_service import AuthService
 from services.analysis_service import AnalysisService
 from core.error import (
@@ -35,7 +42,7 @@ from core.error import (
     DataFetchError,
     ToolCallError,
 )
-from core.exceptions import SearchLimitReachedError
+from core.exceptions import SearchLimitReachedError, InvalidTokenError
 from core.logging import get_logger
 from core.database import get_db
 from graph.builder import build_graph
@@ -44,6 +51,9 @@ from datetime import timezone
 logger = get_logger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+
+REFRESH_COOKIE_NAME = "artha_refresh_token"
+COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
 
 _ERROR_MAP: dict[type, tuple[int, str]] = {
     AuthenticationError: (401, "invalid_api_key"),
@@ -68,6 +78,19 @@ def get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "127.0.0.1"
 
 
+def _set_refresh_cookie(response: Response, refresh_token: str):
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        httponly=True,
+        max_age=COOKIE_MAX_AGE,
+        path="/auth",
+        samesite="lax",
+        secure=False,  # Set to True if running behind HTTPS in production
+    )
+
+
+
 @router.get("/health")
 async def health_check():
     try:
@@ -89,49 +112,98 @@ def health_check_head():
 @limiter.limit("5/minute")
 async def signup(
     request: Request,
+    response: Response,
     body: AuthRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    token, user_doc = await auth_service.signup_user(
+    access_token, refresh_token, user_doc = await auth_service.signup_user(
         body.email, body.password, body.name
     )
+    _set_refresh_cookie(response, refresh_token)
     user = AuthUser(
         id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
     )
-    return AuthResponse(token=token, user=user)
+    return AuthResponse(token=access_token, user=user)
 
 
 @router.post("/auth/login", response_model=AuthResponse)
 @limiter.limit("5/minute")
 async def login(
     request: Request,
+    response: Response,
     body: AuthRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    token, user_doc = await auth_service.login_user(body.email, body.password)
+    access_token, refresh_token, user_doc = await auth_service.login_user(body.email, body.password)
+    _set_refresh_cookie(response, refresh_token)
     user = AuthUser(
         id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
     )
-    return AuthResponse(token=token, user=user)
+    return AuthResponse(token=access_token, user=user)
 
 
 @router.post("/auth/google", response_model=AuthResponse)
 @limiter.limit("5/minute")
 async def google_auth(
     request: Request,
+    response: Response,
     body: GoogleAuthRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    token, user_doc = await auth_service.authenticate_google_user(body.credential_token)
+    access_token, refresh_token, user_doc = await auth_service.authenticate_google_user(body.credential_token)
+    _set_refresh_cookie(response, refresh_token)
     user = AuthUser(
         id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
     )
-    return AuthResponse(token=token, user=user)
+    return AuthResponse(token=access_token, user=user)
+
+
+@router.post("/auth/refresh", response_model=AuthResponse)
+async def refresh_token_route(
+    request: Request,
+    response: Response,
+    auth_service: AuthService = Depends(get_auth_service),
+    user_repository: UserRepository = Depends(get_user_repository),
+):
+    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not refresh_token:
+        # Fallback to body if provided
+        try:
+            body = await request.json()
+            refresh_token = body.get("refresh_token")
+        except Exception:
+            pass
+
+    if not refresh_token or not refresh_token.strip():
+        raise InvalidTokenError("Refresh token is missing.")
+
+    claims = auth_service.verify_refresh_token(refresh_token)
+    user_row = await user_repository.get_by_id(claims["sub"])
+    if not user_row:
+        raise InvalidTokenError("User no longer exists.")
+
+    user_id = str(user_row["_id"])
+    email = user_row["email"]
+
+    new_access_token, new_refresh_token = auth_service.create_tokens(user_id, email)
+    _set_refresh_cookie(response, new_refresh_token)
+
+    user = AuthUser(
+        id=user_id, email=email, name=user_row.get("name")
+    )
+    return AuthResponse(token=new_access_token, user=user)
+
+
+@router.post("/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie(key=REFRESH_COOKIE_NAME, path="/auth")
+    return {"status": "success", "message": "Logged out successfully."}
 
 
 @router.get("/auth/me", response_model=AuthUser)
 def me(user: AuthUser = Depends(get_current_user)):
     return user
+
 
 
 @router.post("/auth/change-password")
@@ -155,6 +227,14 @@ def verify_openrouter_key(
 ):
     analysis_service.validate_api_keys(body.openrouter_api_key)
     return {"valid": True}
+
+
+@router.get("/tickers", response_model=list[TickerItem])
+async def get_tickers(
+    analysis_service: AnalysisService = Depends(get_analysis_service),
+):
+    return await analysis_service.get_nse_tickers()
+
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
@@ -204,55 +284,8 @@ async def analyze(
 
         data_bundle = final_state.get("data_bundle", {})
 
-        if user is not None:
-            from datetime import datetime, timezone
-
-            doc = {
-                "analyzed_at": datetime.now(timezone.utc),
-                "status": "success",
-                "news_analyst_report": final_state.get("news_analyst_report", {}),
-                "news_analyst_summary": final_state.get("news_analyst_summary", {}),
-                "technical_analyst_report": final_state.get(
-                    "technical_analyst_report", {}
-                ),
-                "technical_analyst_summary": final_state.get(
-                    "technical_analyst_summary", {}
-                ),
-                "fundamental_analyst_report": final_state.get(
-                    "fundamental_analyst_report", {}
-                ),
-                "fundamental_analyst_summary": final_state.get(
-                    "fundamental_analyst_summary", {}
-                ),
-                "market_analyst_report": final_state.get("market_analyst_report", {}),
-                "market_analyst_summary": final_state.get("market_analyst_summary", {}),
-                "sector_analyst_report": final_state.get("sector_analyst_report", {}),
-                "sector_analyst_summary": final_state.get("sector_analyst_summary", {}),
-                "company_info": data_bundle.get("company_info"),
-                "historical_prices": data_bundle.get("historical_prices"),
-                "charts_data": final_state.get("charts_data"),
-                "fundamental_data": data_bundle.get("fundamental_data"),
-                "technical_data": data_bundle.get("technical_data"),
-                "market_data": data_bundle.get("market_data"),
-                "company_news": data_bundle.get("news_data", {}).get("company_news"),
-                "indian_news": data_bundle.get("news_data", {}).get("indian_news"),
-                "global_news": data_bundle.get("news_data", {}).get("global_news"),
-                "verdict": final_state.get("verdict"),
-                "bull_thesis": final_state.get("investment_debate", {}).get(
-                    "bull_thesis"
-                ),
-                "bear_thesis": final_state.get("investment_debate", {}).get(
-                    "bear_thesis"
-                ),
-                "debate_transcript": final_state.get("investment_debate", {}).get(
-                    "debate_history"
-                ),
-            }
-
-            analysis_id = await analysis_service.save_analysis(user.id, ticker, doc)
-            logger.info(f"Analysis saved | ticker={ticker} | analysis_id={analysis_id}")
-
         return AnalyzeResponse(
+
             ticker=ticker,
             news_report=final_state.get("news_analyst_report", {}),
             technical_report=final_state.get("technical_analyst_report", {}),
@@ -291,13 +324,86 @@ async def analyze(
         logger.exception(
             f"Unexpected error occurred in /analyze endpoint | ticker={ticker} | error={e}"
         )
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "unexpected_error",
-                "message": "An unexpected error occurred",
-            },
-        )
+        err_str = str(e).lower()
+        if "401" in err_str or "unauthorized" in err_str or "api_key" in err_str or "authentication" in err_str:
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": "invalid_api_key",
+                    "message": "We couldn't authenticate with OpenRouter. Please verify your OpenRouter API Key.",
+                },
+            )
+        elif "429" in err_str or "rate limit" in err_str or "quota" in err_str or "too many" in err_str:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "llm_rate_limit",
+                    "message": "All free AI models in the pool are currently rate-limited by OpenRouter. Please try again in a minute.",
+                },
+            )
+        elif "503" in err_str or "unavailable" in err_str or "overloaded" in err_str:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "llm_unavailable",
+                    "message": "AI model servers are currently overloaded. Please retry in a few seconds.",
+                },
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "error": "analysis_failed",
+                    "message": "Our AI analysis engine encountered a temporary issue while compiling report data. Please try again in a moment.",
+                },
+            )
+
+
+
+
+@router.post("/analyses/save", response_model=SaveAnalysisResponse)
+@limiter.limit("10/minute")
+async def save_analysis_route(
+    request: Request,
+    body: SaveAnalysisRequest,
+    user: AuthUser = Depends(get_current_user),
+    analysis_service: AnalysisService = Depends(get_analysis_service),
+):
+    from datetime import datetime, timezone
+
+    ticker = body.ticker.strip().upper()
+    doc = {
+        "analyzed_at": datetime.now(timezone.utc),
+        "status": "success",
+        "news_analyst_report": body.news_report,
+        "technical_analyst_report": body.technical_report,
+        "fundamental_analyst_report": body.fundamental_report,
+        "market_analyst_report": body.market_report,
+        "sector_analyst_report": body.sector_report,
+        "company_info": body.company_info,
+        "historical_prices": body.historical_prices,
+        "charts_data": body.charts_data,
+        "fundamental_data": body.fundamental_data,
+        "technical_data": body.technical_data,
+        "market_data": body.market_data,
+        "company_news": body.company_news,
+        "indian_news": body.indian_news,
+        "global_news": body.global_news,
+        "verdict": body.verdict,
+        "bull_thesis": body.bull_thesis,
+        "bear_thesis": body.bear_thesis,
+    }
+
+    analysis_id = await analysis_service.save_analysis(user.id, ticker, doc)
+    logger.info(
+        f"Analysis explicitly saved | ticker={ticker} | analysis_id={analysis_id} | user_id={user.id}"
+    )
+
+    return SaveAnalysisResponse(
+        status="success",
+        analysis_id=analysis_id,
+        message="Analysis saved successfully to Past Analysis.",
+    )
 
 
 @router.get("/analyses/history", response_model=list[AnalysisSummary])

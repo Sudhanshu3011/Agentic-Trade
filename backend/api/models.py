@@ -52,6 +52,12 @@ class VerifyOpenRouterKeyRequest(BaseModel):
     openrouter_api_key: str
 
 
+class TickerItem(BaseModel):
+    symbol: str
+    name: str
+
+
+
 class AnalyzeRequest(BaseModel):
     ticker: str
     include_debate: bool = False
@@ -94,3 +100,31 @@ class AnalysisDetail(AnalyzeResponse):
     analysis_id: str
     user_id: str
     analyzed_at: datetime
+
+
+class SaveAnalysisRequest(BaseModel):
+    ticker: str
+    news_report: dict | str | None = None
+    technical_report: dict | str | None = None
+    fundamental_report: dict | str | None = None
+    market_report: dict | str | None = None
+    sector_report: dict | str | None = None
+    company_info: dict | None = None
+    historical_prices: list | None = None
+    charts_data: Optional[dict] = None
+    fundamental_data: dict | None = None
+    technical_data: dict | None = None
+    market_data: dict | None = None
+    company_news: dict | None = None
+    indian_news: dict | None = None
+    global_news: dict | None = None
+    verdict: dict | None = None
+    bull_thesis: dict | str | None = None
+    bear_thesis: dict | str | None = None
+
+
+class SaveAnalysisResponse(BaseModel):
+    status: str
+    analysis_id: str
+    message: str
+

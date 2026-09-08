@@ -21,7 +21,8 @@ from core.exceptions import (
 )
 
 PBKDF2_ITERATIONS = 210_000
-TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7
+ACCESS_TOKEN_TTL_SECONDS = 60 * 15  # 15 minutes
+REFRESH_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7  # 7 days
 
 
 class AuthService:
@@ -60,23 +61,55 @@ class AuthService:
         except Exception:
             return False
 
-    def create_token(self, user_id: str, email: str) -> str:
+    def create_access_token(self, user_id: str, email: str) -> str:
         payload = {
             "sub": user_id,
             "email": email,
-            "exp": int(time.time()) + TOKEN_TTL_SECONDS,
+            "type": "access",
+            "exp": int(time.time()) + ACCESS_TOKEN_TTL_SECONDS,
         }
         return jwt.encode(payload, self._secret_key(), algorithm="HS256")
 
-    def verify_token(self, token: str) -> dict:
+    def create_refresh_token(self, user_id: str, email: str) -> str:
+        payload = {
+            "sub": user_id,
+            "email": email,
+            "type": "refresh",
+            "exp": int(time.time()) + REFRESH_TOKEN_TTL_SECONDS,
+        }
+        return jwt.encode(payload, self._secret_key(), algorithm="HS256")
+
+    def create_tokens(self, user_id: str, email: str) -> tuple[str, str]:
+        return self.create_access_token(user_id, email), self.create_refresh_token(user_id, email)
+
+    def create_token(self, user_id: str, email: str) -> str:
+        return self.create_access_token(user_id, email)
+
+    def verify_access_token(self, token: str) -> dict:
         try:
-            return jwt.decode(token, self._secret_key(), algorithms=["HS256"])
+            claims = jwt.decode(token, self._secret_key(), algorithms=["HS256"])
+            token_type = claims.get("type", "access")
+            if token_type != "access":
+                raise InvalidTokenError("Invalid token type.")
+            return claims
         except Exception:
             raise InvalidTokenError("Session expired or invalid token.")
 
+    def verify_refresh_token(self, token: str) -> dict:
+        try:
+            claims = jwt.decode(token, self._secret_key(), algorithms=["HS256"])
+            if claims.get("type") != "refresh":
+                raise InvalidTokenError("Invalid refresh token type.")
+            return claims
+        except Exception:
+            raise InvalidTokenError("Refresh token expired or invalid.")
+
+    def verify_token(self, token: str) -> dict:
+        return self.verify_access_token(token)
+
     async def signup_user(
         self, email: str, password: str, name: str | None = None
-    ) -> tuple[str, dict]:
+    ) -> tuple[str, str, dict]:
         email = email.lower()
         existing_user = await self.user_repository.get_by_email(email)
         if existing_user:
@@ -91,9 +124,10 @@ class AuthService:
         }
         user_id = await self.user_repository.create_user(user_doc)
         user_doc["id"] = user_id
-        return self.create_token(user_id, email), user_doc
+        access_token, refresh_token = self.create_tokens(user_id, email)
+        return access_token, refresh_token, user_doc
 
-    async def login_user(self, email: str, password: str) -> tuple[str, dict]:
+    async def login_user(self, email: str, password: str) -> tuple[str, str, dict]:
         user_row = await self.user_repository.get_by_email(email)
         if not user_row or not user_row.get("password_hash"):
             raise InvalidCredentialsError("Email or password is incorrect.")
@@ -105,7 +139,8 @@ class AuthService:
             raise InvalidCredentialsError("Email or password is incorrect.")
 
         user_row["id"] = str(user_row["_id"])
-        return self.create_token(user_row["id"], user_row["email"]), user_row
+        access_token, refresh_token = self.create_tokens(user_row["id"], user_row["email"])
+        return access_token, refresh_token, user_row
 
     async def change_password(
         self, user_id: str, current_password: str, new_password: str
@@ -123,7 +158,7 @@ class AuthService:
         new_hash = await asyncio.to_thread(self._hash_password, new_password)
         await self.user_repository.update_user(user_id, {"password_hash": new_hash})
 
-    async def authenticate_google_user(self, credential_token: str) -> tuple[str, dict]:
+    async def authenticate_google_user(self, credential_token: str) -> tuple[str, str, dict]:
         google_client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
         if not google_client_id:
             raise ConfigurationError("Google Client ID is not configured on backend.")
@@ -166,4 +201,6 @@ class AuthService:
                 await self.user_repository.update_user(user_id, update_fields)
                 user_doc.update(update_fields)
 
-        return self.create_token(user_id, email), user_doc
+        access_token, refresh_token = self.create_tokens(user_id, email)
+        return access_token, refresh_token, user_doc
+
