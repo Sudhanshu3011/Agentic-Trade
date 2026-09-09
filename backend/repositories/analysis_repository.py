@@ -58,8 +58,9 @@ class AnalysisRepository:
         except Exception as e:
             raise DatabaseOperationError(f"Failed to save analysis: {e}")
 
-    async def get_user_analyses(self, user_id: str, limit: int = 10) -> list[dict]:
+    async def get_user_analyses(self, user_id: str, limit: int = 5) -> list[dict]:
         try:
+            effective_limit = min(limit, self.MAX_ANALYSES_PER_USER)
             cursor = self.analyses_collection.find(
                 {"user_id": user_id},
                 {
@@ -87,9 +88,9 @@ class AnalysisRepository:
                     "debate_transcript": 0,
                 },
                 sort=[("analyzed_at", -1)],
-                limit=limit,
+                limit=effective_limit,
             )
-            return await cursor.to_list(length=limit)
+            return await cursor.to_list(length=effective_limit)
         except Exception as e:
             raise DatabaseOperationError(f"Failed to fetch user analyses: {e}")
 

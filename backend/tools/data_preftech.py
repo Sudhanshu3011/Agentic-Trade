@@ -2,7 +2,13 @@ import threading
 import yfinance as yf
 
 from core.yf_context import yf_call, YFinance401Error
-from tools.utils.data_prefetch_helper import (_normalize_df, _get_cached , _set_cached)
+from tools.utils.data_prefetch_helper import (
+    _normalize_df,
+    _get_cached,
+    _set_cached,
+    _get_cached_index,
+    _set_cached_index,
+)
 from tools.utils.fallback_mapper import map_fallback_to_yf, fetch_indianapi_fallback_data
 from core.logging import get_logger
 
@@ -226,11 +232,13 @@ def prefetch_ticker_bundle(ticker: str) -> dict:
             # ──────────────────────────────────────────────────────────
 
             for name, sym in _MARKET_TICKERS.items():
+                cached_idx = _get_cached_index(name)
+                if cached_idx:
+                    bundle["market_indices"][name] = cached_idx
+                    continue
 
                 try:
-
                     with yf_call(f"prefetch_market_{name}"):
-
                         idx_df = yf.download(
                             sym,
                             period="1y",
@@ -240,8 +248,7 @@ def prefetch_ticker_bundle(ticker: str) -> dict:
                         )
 
                     normalized = _normalize_df(idx_df)
-
-                    bundle["market_indices"][name] = {
+                    index_val = {
                         "data": normalized,
                         "status": ("success" if normalized is not None else "failed"),
                         "error": (
@@ -250,9 +257,11 @@ def prefetch_ticker_bundle(ticker: str) -> dict:
                         "ticker": sym,
                         "source": "yfinance",
                     }
+                    bundle["market_indices"][name] = index_val
+                    if normalized is not None:
+                        _set_cached_index(name, index_val)
 
                 except Exception as exc:
-
                     logger.warning(f"[prefetch] market '{name}' fetch failed: {exc}")
 
         except YFinance401Error as e:

@@ -46,6 +46,15 @@ export function AppGate() {
         setShowAuth(true);
         window.history.replaceState({}, document.title, window.location.pathname);
       }
+      if (params.get("expired") === "true") {
+        setShowAuth(true);
+        const errMsg = "Your session has expired. Please sign in again.";
+        setAuthError(errMsg);
+        toast.error(errMsg, {
+          duration: 5000,
+        });
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
       if (params.get("limit_reached") === "true") {
         setShowAuth(true);
         const errMsg = "You have reached the limit of 3 free searches. Please sign up or log in to search more.";

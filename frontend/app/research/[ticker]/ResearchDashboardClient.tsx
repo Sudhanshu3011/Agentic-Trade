@@ -163,7 +163,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
         if (e instanceof AnalysisError) {
           if (e.title === "SIGN IN REQUIRED") {
             clearAuthSession();
-            router.replace("/search?auth=true");
+            router.replace("/search?expired=true");
             return;
           }
           if (e.title === "INVALID API KEY") {
