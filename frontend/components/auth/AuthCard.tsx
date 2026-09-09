@@ -6,9 +6,10 @@ import { Mail, Lock, ArrowRight, User, Eye, EyeOff, X } from "lucide-react";
 import { FaGoogle } from "react-icons/fa";
 import { Toaster, toast } from "sonner";
 import Script from "next/script";
-import { AnalysisError, authRequest, authenticateWithGoogle, saveAuthSession, type AuthUser } from "@/lib/api";
+import { AnalysisError, authRequest, authenticateWithGoogle, requestRegistrationOTP, verifyRegistrationOTP, saveAuthSession, type AuthUser } from "@/lib/api";
 
 type Tab = "login" | "signup";
+type SignupStep = "details" | "otp_verify";
 
 const colTrans = (delay = 0) => ({
   x: { duration: 0.8, ease: [0.22, 1, 0.36, 1] as const, delay },
@@ -26,19 +27,46 @@ export function AuthCard({
   initialError?: string | null;
 }) {
   const [tab, setTab] = useState<Tab>("login");
+  const [signupStep, setSignupStep] = useState<SignupStep>("details");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpTimer, setOtpTimer] = useState(300); // 5 minutes in seconds
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError || null);
 
   const successCallbackRef = useRef<any>(null);
   useEffect(() => { successCallbackRef.current = handleGoogleSuccess; });
 
-  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError(null);
+  // 5-minute countdown timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (tab === "signup" && signupStep === "otp_verify" && otpTimer > 0) {
+      interval = setInterval(() => {
+        setOtpTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [tab, signupStep, otpTimer]);
 
+  // Resend cooldown timer effect
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (resendCooldown > 0) {
+      interval = setInterval(() => {
+        setResendCooldown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [resendCooldown]);
+
+  const handleRequestOTP = async () => {
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       toast.error("Password must be at least 8 characters.");
@@ -46,17 +74,74 @@ export function AuthCard({
     }
 
     setLoading(true);
+    setError(null);
     try {
-      const session = await authRequest({ mode: tab, email, password, name });
-      saveAuthSession(session);
-      toast.success(tab === "login" ? "Logged in successfully!" : "Account created successfully!");
-      onAuthed(session.user);
+      const res = await requestRegistrationOTP({ email, password, name });
+      toast.success(res.message || "Verification code sent to your email!");
+      setSignupStep("otp_verify");
+      setOtpTimer(300); // Reset 5 min timer
+      setResendCooldown(30); // 30s resend cooldown
     } catch (err) {
-      const errMsg = err instanceof AnalysisError ? err.message : "Unable to authenticate right now.";
+      const errMsg = err instanceof AnalysisError ? err.message : "Unable to send verification code.";
       setError(errMsg);
       toast.error(errMsg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (otpCode.trim().length !== 6) {
+      setError("Please enter a valid 6-digit verification code.");
+      toast.error("Please enter a valid 6-digit verification code.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const session = await verifyRegistrationOTP({ email, otpCode: otpCode.trim() });
+      saveAuthSession(session);
+      toast.success("Account created and verified successfully!");
+      onAuthed(session.user);
+    } catch (err) {
+      const errMsg = err instanceof AnalysisError ? err.message : "OTP verification failed.";
+      setError(errMsg);
+      toast.error(errMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+
+    if (tab === "login") {
+      if (password.length < 8) {
+        setError("Password must be at least 8 characters.");
+        toast.error("Password must be at least 8 characters.");
+        return;
+      }
+      setLoading(true);
+      try {
+        const session = await authRequest({ mode: "login", email, password });
+        saveAuthSession(session);
+        toast.success("Logged in successfully!");
+        onAuthed(session.user);
+      } catch (err) {
+        const errMsg = err instanceof AnalysisError ? err.message : "Unable to authenticate right now.";
+        setError(errMsg);
+        toast.error(errMsg);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      if (signupStep === "details") {
+        await handleRequestOTP();
+      } else {
+        await handleVerifyOTP();
+      }
     }
   };
 
@@ -189,7 +274,7 @@ export function AuthCard({
         {/* Form */}
         <AnimatePresence mode="wait">
           <motion.form
-            key={tab}
+            key={tab + (tab === "signup" ? `_${signupStep}` : "")}
             initial={{ opacity: 0, x: tab === "login" ? -15 : 15 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: tab === "login" ? 15 : -15 }}
@@ -198,45 +283,99 @@ export function AuthCard({
             onSubmit={submit}
           >
             <div className="space-y-3.5">
-              {tab === "signup" && (
-                <Field
-                  id="signup-name-input"
-                  icon={<User size={14} />}
-                  label="NAME"
-                  type="text"
-                  placeholder="Jane Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              )}
-              <Field
-                id="auth-email-input"
-                icon={<Mail size={14} />}
-                label="EMAIL"
-                type="email"
-                placeholder="user@gmail.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-              <Field
-                id="auth-password-input"
-                icon={<Lock size={14} />}
-                label="PASSWORD"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-                autoComplete={tab === "login" ? "current-password" : "new-password"}
-              />
-              {tab === "login" && (
-                <div className="flex justify-end">
-                  <a id="forgot-password-link" href="#" onClick={handleForgotPassword} className="text-[11px] text-neutral-500 transition-colors hover:text-[#d4a84c]">
-                    Forgot password?
-                  </a>
-                </div>
+              {tab === "signup" && signupStep === "otp_verify" ? (
+                <>
+                  <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-center">
+                    <p className="text-[11px] text-neutral-600 leading-snug">
+                      We sent a 6-digit code to <strong className="text-black font-semibold">{email}</strong>
+                    </p>
+                  </div>
+                  <div className="group">
+                    <label className="mb-1 block text-[9px] font-semibold tracking-[0.2em] text-neutral-500">
+                      ENTER 6-DIGIT CODE
+                    </label>
+                    <input
+                      id="otp-code-input"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="123456"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                      autoFocus
+                      required
+                      className="w-full text-center font-mono text-2xl font-bold tracking-[0.5em] py-2.5 rounded-lg border border-black/10 bg-white/80 text-black placeholder:text-neutral-300 transition-all focus:border-[#d4a84c] focus:bg-white focus:outline-none focus:ring-4 focus:ring-[#d4a84c]/15"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] font-mono text-neutral-500 pt-1">
+                    <span>
+                      Expires in:{" "}
+                      <strong className={otpTimer > 0 ? "text-amber-600 font-bold" : "text-red-600 font-bold"}>
+                        {Math.floor(otpTimer / 60).toString().padStart(2, "0")}:{(otpTimer % 60).toString().padStart(2, "0")}
+                      </strong>
+                    </span>
+                    <button
+                      type="button"
+                      disabled={resendCooldown > 0 || loading}
+                      onClick={handleRequestOTP}
+                      className="text-[#d4a84c] font-semibold hover:underline disabled:opacity-50 cursor-pointer"
+                    >
+                      {resendCooldown > 0 ? `Resend (${resendCooldown}s)` : "Resend Code"}
+                    </button>
+                  </div>
+                  <div className="flex justify-center pt-1">
+                    <button
+                      type="button"
+                      onClick={() => { setSignupStep("details"); setError(null); }}
+                      className="text-[11px] text-neutral-400 hover:text-black transition-colors"
+                    >
+                      ← Change details
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {tab === "signup" && (
+                    <Field
+                      id="signup-name-input"
+                      icon={<User size={14} />}
+                      label="NAME"
+                      type="text"
+                      placeholder="Jane Doe"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  )}
+                  <Field
+                    id="auth-email-input"
+                    icon={<Mail size={14} />}
+                    label="EMAIL"
+                    type="email"
+                    placeholder="user@gmail.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                  <Field
+                    id="auth-password-input"
+                    icon={<Lock size={14} />}
+                    label="PASSWORD"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    autoComplete={tab === "login" ? "current-password" : "new-password"}
+                  />
+                  {tab === "login" && (
+                    <div className="flex justify-end">
+                      <a id="forgot-password-link" href="#" onClick={handleForgotPassword} className="text-[11px] text-neutral-500 transition-colors hover:text-[#d4a84c]">
+                        Forgot password?
+                      </a>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -267,7 +406,13 @@ export function AuthCard({
                 className="group relative w-full overflow-hidden rounded-lg bg-black py-2.5 text-xs font-semibold tracking-[0.3em] text-white disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
               >
                 <span className="relative z-10 flex items-center justify-center gap-1.5">
-                  {loading ? "PLEASE WAIT..." : tab === "login" ? "LOGIN" : "CREATE ACCOUNT"}
+                  {loading
+                    ? "PLEASE WAIT..."
+                    : tab === "login"
+                    ? "LOGIN"
+                    : signupStep === "details"
+                    ? "SEND CODE"
+                    : "VERIFY & CREATE ACCOUNT"}
                   {!loading && <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />}
                 </span>
                 {!loading && (

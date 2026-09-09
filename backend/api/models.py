@@ -39,6 +39,41 @@ class AuthResponse(BaseModel):
     user: AuthUser
 
 
+class RequestOTPRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
+    name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if "@" not in email or "." not in email.rsplit("@", 1)[-1]:
+            raise ValueError("Enter a valid email address.")
+        return email
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        if not any(c.isupper() for c in value):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if not any(c.islower() for c in value):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if not any(c.isdigit() for c in value):
+            raise ValueError("Password must contain at least one number.")
+        return value
+
+
+class VerifyOTPRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    otp_code: str = Field(min_length=6, max_length=6)
+
+
+class RequestOTPResponse(BaseModel):
+    status: str
+    message: str
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=8, max_length=128)
     new_password: str = Field(min_length=8, max_length=128)

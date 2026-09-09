@@ -50,3 +50,15 @@ class ConfigurationError(DomainError):
 
 class InvalidAPIKeyError(DomainError):
     pass
+
+
+class InvalidOTPError(DomainError):
+    pass
+
+
+class OTPExpiredError(DomainError):
+    pass
+
+
+class TooManyOTPAttemptsError(DomainError):
+    pass

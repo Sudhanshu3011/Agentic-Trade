@@ -81,7 +81,7 @@ export default function HistoryDashboardClient({ analysisId }: { analysisId: str
           setError({ title: "NOT FOUND", message: "This analysis does not exist or you do not have permission to view it." });
         } else if (e.message?.includes("session") || e.message?.includes("SIGN IN REQUIRED") || e.message?.includes("expired")) {
           clearAuthSession();
-          router.replace("/search?auth=true");
+          router.replace("/search?expired=true");
           return;
         } else {
           setError({

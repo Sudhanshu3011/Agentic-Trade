@@ -13,6 +13,9 @@ from api.models import (
     ChangePasswordRequest,
     GoogleAuthRequest,
     VerifyOpenRouterKeyRequest,
+    RequestOTPRequest,
+    VerifyOTPRequest,
+    RequestOTPResponse,
     TickerItem,
     AnalyzeRequest,
     AnalyzeResponse,
@@ -44,7 +47,16 @@ from core.error import (
     DataFetchError,
     ToolCallError,
 )
-from core.exceptions import SearchLimitReachedError, InvalidTokenError
+from core.exceptions import (
+    DomainError,
+    SearchLimitReachedError,
+    InvalidTokenError,
+    InvalidOTPError,
+    OTPExpiredError,
+    TooManyOTPAttemptsError,
+    UserAlreadyExistsError,
+    InvalidCredentialsError,
+)
 from core.logging import get_logger
 from core.database import get_db
 from graph.builder import build_graph
@@ -53,9 +65,6 @@ from datetime import timezone
 logger = get_logger(__name__)
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
-
-REFRESH_COOKIE_NAME = "artha_refresh_token"
-COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days
 
 _ERROR_MAP: dict[type, tuple[int, str]] = {
     AuthenticationError: (401, "invalid_api_key"),
@@ -67,6 +76,11 @@ _ERROR_MAP: dict[type, tuple[int, str]] = {
     ToolCallError: (500, "tool_call_failed"),
     NodeExecutionError: (500, "node_execution_failed"),
     AgentError: (500, "analysis_failed"),
+    InvalidOTPError: (400, "invalid_otp"),
+    OTPExpiredError: (400, "otp_expired"),
+    TooManyOTPAttemptsError: (429, "too_many_otp_attempts"),
+    UserAlreadyExistsError: (409, "email_exists"),
+    InvalidCredentialsError: (401, "invalid_credentials"),
 }
 
 
@@ -78,25 +92,6 @@ def get_client_ip(request: Request) -> str:
     if x_real_ip:
         return x_real_ip.strip()
     return request.client.host if request.client else "127.0.0.1"
-
-
-def _set_refresh_cookie(response: Response, refresh_token: str, request: Request | None = None):
-    is_secure = False
-    if request:
-        proto = request.headers.get("x-forwarded-proto", request.url.scheme).lower()
-        is_secure = proto == "https"
-    else:
-        is_secure = os.getenv("ENVIRONMENT", "development").lower() in ("production", "prod")
-
-    response.set_cookie(
-        key=REFRESH_COOKIE_NAME,
-        value=refresh_token,
-        httponly=True,
-        max_age=COOKIE_MAX_AGE,
-        path="/auth",
-        samesite="lax",
-        secure=is_secure,
-    )
 
 
 @router.get("/health")
@@ -116,97 +111,123 @@ def health_check_head():
     return Response(status_code=200)
 
 
+@router.post("/auth/request-otp", response_model=RequestOTPResponse)
+@limiter.limit("3/minute")
+async def request_otp(
+    request: Request,
+    body: RequestOTPRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    try:
+        res = await auth_service.request_registration_otp(
+            body.email, body.password, body.name
+        )
+        return RequestOTPResponse(status=res["status"], message=res["message"])
+    except DomainError as e:
+        status_code, error_code = next(
+            (v for k, v in _ERROR_MAP.items() if type(e) is k),
+            (400, "otp_request_failed"),
+        )
+        raise HTTPException(
+            status_code=status_code,
+            detail={"error": error_code, "message": e.message},
+        )
+
+
+@router.post("/auth/verify-otp", response_model=AuthResponse)
+@limiter.limit("5/minute")
+async def verify_otp(
+    request: Request,
+    body: VerifyOTPRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    try:
+        token, user_doc = await auth_service.verify_otp_and_signup(
+            body.email, body.otp_code
+        )
+        user = AuthUser(
+            id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
+        )
+        return AuthResponse(token=token, user=user)
+    except DomainError as e:
+        status_code, error_code = next(
+            (v for k, v in _ERROR_MAP.items() if type(e) is k),
+            (400, "otp_verification_failed"),
+        )
+        raise HTTPException(
+            status_code=status_code,
+            detail={"error": error_code, "message": e.message},
+        )
+
+
 @router.post("/auth/signup", response_model=AuthResponse)
 @limiter.limit("5/minute")
 async def signup(
     request: Request,
-    response: Response,
     body: AuthRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    access_token, refresh_token, user_doc = await auth_service.signup_user(
-        body.email, body.password, body.name
+    raise HTTPException(
+        status_code=400,
+        detail={
+            "error": "otp_required",
+            "message": "Email verification is required. Please request a verification code via /auth/request-otp first.",
+        },
     )
-    _set_refresh_cookie(response, refresh_token, request)
-    user = AuthUser(
-        id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
-    )
-    return AuthResponse(token=access_token, user=user)
 
 
 @router.post("/auth/login", response_model=AuthResponse)
 @limiter.limit("5/minute")
 async def login(
     request: Request,
-    response: Response,
     body: AuthRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    access_token, refresh_token, user_doc = await auth_service.login_user(body.email, body.password)
-    _set_refresh_cookie(response, refresh_token, request)
-    user = AuthUser(
-        id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
-    )
-    return AuthResponse(token=access_token, user=user)
+    try:
+        token, user_doc = await auth_service.login_user(body.email, body.password)
+        user = AuthUser(
+            id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
+        )
+        return AuthResponse(token=token, user=user)
+    except DomainError as e:
+        status_code, error_code = next(
+            (v for k, v in _ERROR_MAP.items() if type(e) is k),
+            (401, "login_failed"),
+        )
+        raise HTTPException(
+            status_code=status_code,
+            detail={"error": error_code, "message": e.message},
+        )
 
 
 @router.post("/auth/google", response_model=AuthResponse)
 @limiter.limit("5/minute")
 async def google_auth(
     request: Request,
-    response: Response,
     body: GoogleAuthRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ):
-    access_token, refresh_token, user_doc = await auth_service.authenticate_google_user(body.credential_token)
-    _set_refresh_cookie(response, refresh_token, request)
-    user = AuthUser(
-        id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
-    )
-    return AuthResponse(token=access_token, user=user)
-
-
-@router.post("/auth/refresh", response_model=AuthResponse)
-async def refresh_token_route(
-    request: Request,
-    response: Response,
-    auth_service: AuthService = Depends(get_auth_service),
-    user_repository: UserRepository = Depends(get_user_repository),
-):
-    refresh_token = request.cookies.get(REFRESH_COOKIE_NAME)
-    if not refresh_token:
-        # Fallback to body if provided
-        try:
-            body = await request.json()
-            refresh_token = body.get("refresh_token")
-        except Exception:
-            pass
-
-    if not refresh_token or not refresh_token.strip():
-        raise InvalidTokenError("Refresh token is missing.")
-
-    claims = auth_service.verify_refresh_token(refresh_token)
-    user_row = await user_repository.get_by_id(claims["sub"])
-    if not user_row:
-        raise InvalidTokenError("User no longer exists.")
-
-    user_id = str(user_row["_id"])
-    email = user_row["email"]
-
-    new_access_token, new_refresh_token = auth_service.create_tokens(user_id, email)
-    _set_refresh_cookie(response, new_refresh_token, request)
-
-    user = AuthUser(
-        id=user_id, email=email, name=user_row.get("name")
-    )
-    return AuthResponse(token=new_access_token, user=user)
-
+    try:
+        token, user_doc = await auth_service.authenticate_google_user(body.credential_token)
+        user = AuthUser(
+            id=user_doc["id"], email=user_doc["email"], name=user_doc.get("name")
+        )
+        return AuthResponse(token=token, user=user)
+    except DomainError as e:
+        status_code, error_code = next(
+            (v for k, v in _ERROR_MAP.items() if type(e) is k),
+            (400, "google_auth_failed"),
+        )
+        raise HTTPException(
+            status_code=status_code,
+            detail={"error": error_code, "message": e.message},
+        )
 
 
 @router.post("/auth/logout")
-async def logout(response: Response):
-    response.delete_cookie(key=REFRESH_COOKIE_NAME, path="/auth")
+async def logout():
     return {"status": "success", "message": "Logged out successfully."}
+
 
 
 @router.get("/auth/me", response_model=AuthUser)
@@ -325,9 +346,14 @@ async def analyze(
             f"Analysis failed | ticker={ticker} | "
             f"error={error_code} | {type(e).__name__}: {e}"
         )
+        user_message = (
+            "Our AI analysis engine encountered a temporary issue while compiling report data. Please try again in a moment."
+            if status_code == 500
+            else e.message
+        )
         raise HTTPException(
             status_code=status_code,
-            detail={"error": error_code, "message": e.message},
+            detail={"error": error_code, "message": user_message},
         )
     except Exception as e:
         logger.exception(

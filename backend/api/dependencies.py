@@ -43,7 +43,7 @@ async def get_current_user(
 
     user_row = await user_repository.get_by_id(claims["sub"])
     if not user_row:
-        raise InvalidTokenError("Session expired or user not found.")
+        raise InvalidTokenError("Your session has expired. Please sign in again.")
 
     return AuthUser(
         id=str(user_row["_id"]),
