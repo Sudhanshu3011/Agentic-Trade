@@ -225,7 +225,8 @@ function buildErrorMessage(
   // Everything else → internal server error / analysis failure
   return {
     title: "ANALYSIS TEMPORARILY UNAVAILABLE",
-    message: serverMsg || "Our AI analysis engine encountered a temporary issue while compiling report data. Please click Retry or try again in a moment.",
+    message:
+      "Our AI analysis engine encountered a temporary issue while compiling report data. Please click Retry or try again in a moment.",
   };
 }
 
@@ -505,40 +506,6 @@ export async function getAnalysisById(
 
 // ── Auth & Interceptor ────────────────────────────────────────────────────────
 
-let refreshPromise: Promise<string | null> | null = null;
-
-export async function refreshTokenSilently(): Promise<string | null> {
-  if (refreshPromise) {
-    return refreshPromise;
-  }
-
-  refreshPromise = (async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        clearAuthSession(false);
-        return null;
-      }
-
-      const data: AuthResponse = await res.json();
-      saveAuthSession(data);
-      return data.token;
-    } catch {
-      clearAuthSession(false);
-      return null;
-    } finally {
-      refreshPromise = null;
-    }
-  })();
-
-  return refreshPromise;
-}
-
 export async function fetchWithAuth(
   input: RequestInfo | URL,
   init?: RequestInit
@@ -555,23 +522,19 @@ export async function fetchWithAuth(
   }
   options.headers = headers;
 
-  let res = await fetch(input, options);
+  const res = await fetch(input, options);
 
   if (res.status === 401) {
     const clone = res.clone();
     try {
       const body = await clone.json();
       const errorCode = body?.detail?.error || body?.error;
-      if (errorCode === "invalid_token" || errorCode === "session_expired") {
-        const newToken = await refreshTokenSilently();
-        if (newToken) {
-          const retryHeaders = new Headers(options.headers || {});
-          retryHeaders.set("Authorization", `Bearer ${newToken}`);
-          options.headers = retryHeaders;
-          res = await fetch(input, options);
-        }
+      if (errorCode !== "invalid_api_key") {
+        clearAuthSession(false);
       }
-    } catch { }
+    } catch {
+      clearAuthSession(false);
+    }
   }
 
   return res;
@@ -683,6 +646,104 @@ export function saveOpenRouterApiKey(key: string) {
       localStorage.setItem(`openrouter_api_key_${user.email}`, trimmed);
     }
   } catch { }
+}
+
+export async function requestRegistrationOTP({
+  email,
+  password,
+  name,
+}: {
+  email: string;
+  password: string;
+  name?: string;
+}): Promise<{ status: string; message: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/auth/request-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password, name }),
+    });
+  } catch {
+    throw new AnalysisError({
+      title: "CONNECTION FAILED",
+      message: "Unable to reach the authentication server.",
+    });
+  }
+
+  if (!res.ok) {
+    let errorMessage = "";
+    try {
+      const errorBody = await res.json();
+      if (typeof errorBody.detail === "string") {
+        errorMessage = errorBody.detail;
+      } else if (Array.isArray(errorBody.detail) && errorBody.detail.length > 0) {
+        const firstErr = errorBody.detail[0];
+        errorMessage = typeof firstErr === "string"
+          ? firstErr
+          : (firstErr?.msg ? firstErr.msg.replace(/^Value error,\s*/i, "") : "");
+      } else if (typeof errorBody.detail === "object" && errorBody.detail?.message) {
+        errorMessage = errorBody.detail.message;
+      } else if (typeof errorBody.message === "string") {
+        errorMessage = errorBody.message;
+      }
+    } catch { }
+
+    throw new AnalysisError({
+      title: "REQUEST FAILED",
+      message: errorMessage || "Unable to send verification code.",
+    });
+  }
+
+  return res.json();
+}
+
+export async function verifyRegistrationOTP({
+  email,
+  otpCode,
+}: {
+  email: string;
+  otpCode: string;
+}): Promise<AuthResponse> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, otp_code: otpCode }),
+    });
+  } catch {
+    throw new AnalysisError({
+      title: "CONNECTION FAILED",
+      message: "Unable to reach the authentication server.",
+    });
+  }
+
+  if (!res.ok) {
+    let errorMessage = "";
+    try {
+      const errorBody = await res.json();
+      if (typeof errorBody.detail === "string") {
+        errorMessage = errorBody.detail;
+      } else if (Array.isArray(errorBody.detail) && errorBody.detail.length > 0) {
+        const firstErr = errorBody.detail[0];
+        errorMessage = typeof firstErr === "string"
+          ? firstErr
+          : (firstErr?.msg ? firstErr.msg.replace(/^Value error,\s*/i, "") : "");
+      } else if (typeof errorBody.detail === "object" && errorBody.detail?.message) {
+        errorMessage = errorBody.detail.message;
+      } else if (typeof errorBody.message === "string") {
+        errorMessage = errorBody.message;
+      }
+    } catch { }
+
+    throw new AnalysisError({
+      title: "VERIFICATION FAILED",
+      message: errorMessage || "Invalid verification code.",
+    });
+  }
+
+  return res.json();
 }
 
 export async function authRequest({
