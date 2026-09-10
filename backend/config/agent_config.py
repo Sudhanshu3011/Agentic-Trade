@@ -1,46 +1,3 @@
-AGENT_TOKEN_CONFIG = {
-    "FundamentalAnalyst": {
-        "low": 2500,
-        "medium": 3000,
-        "high": 4000,
-    },
-    "MarketAnalyst": {
-        "low": 2500,
-        "medium": 3000,
-        "high": 4000,
-    },
-    "NewsAnalyst": {
-        "low": 1500,
-        "medium": 2000,
-        "high": 2500,
-    },
-    "SectorAnalyst": {
-        "low": 200,
-        "medium": 300,
-        "high": 400,
-    },
-    "TechnicalAnalyst": {
-        "low": 2500,
-        "medium": 3000,
-        "high": 4000,
-    },
-    "ResearchManager": {
-        "low": 1000,
-        "medium": 1500,
-        "high": 2000,
-    },
-    "BullResearcher": {
-        "low": 1500,
-        "medium": 2000,
-        "high": 2500,
-    },
-    "BearResearcher": {
-        "low": 1500,
-        "medium": 2000,
-        "high": 2500,
-    },
-}
-
 import os
 
 # ---------------------------------------------------------
@@ -59,6 +16,7 @@ DEBATE_MANAGER_MODELS = [
 SECTOR_ANALYST_MODELS = [
     "dots-studio/dots-3-note-preview:free",
     "thinking-machines/inkling-small:free",
+    "nvidia/nemotron-3.5-lightning:free",
 ]
 
 # 3. Other 4 Analysts (Fundamental, Market, News, Technical)
@@ -94,5 +52,49 @@ AGENT_MODEL_CONFIG = {
     "MarketAnalyst": _parse_model_env("MARKET_ANALYST_MODEL", OTHER_ANALYST_MODELS),
     "NewsAnalyst": _parse_model_env("NEWS_ANALYST_MODEL", OTHER_ANALYST_MODELS),
     "TechnicalAnalyst": _parse_model_env("TECHNICAL_ANALYST_MODEL", OTHER_ANALYST_MODELS),
+}
+
+
+AGENT_TOKEN_CONFIG = {
+    "FundamentalAnalyst": {
+        "low": 2500,
+        "medium": 3000,
+        "high": 4000,
+    },
+    "MarketAnalyst": {
+        "low": 2500,
+        "medium": 3000,
+        "high": 4000,
+    },
+    "NewsAnalyst": {
+        "low": 1500,
+        "medium": 2000,
+        "high": 2500,
+    },
+    "SectorAnalyst": {
+        "low": 200,
+        "medium": 400,
+        "high": 500,
+    },
+    "TechnicalAnalyst": {
+        "low": 2500,
+        "medium": 3000,
+        "high": 4000,
+    },
+    "ResearchManager": {
+        "low": 1000,
+        "medium": 1500,
+        "high": 2000,
+    },
+    "BullResearcher": {
+        "low": 1500,
+        "medium": 2000,
+        "high": 2500,
+    },
+    "BearResearcher": {
+        "low": 1500,
+        "medium": 2000,
+        "high": 2500,
+    },
 }
 
