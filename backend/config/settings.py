@@ -37,9 +37,9 @@ def get_openrouter_llm(
     if agent_name and agent_name in AGENT_TOKEN_CONFIG:
         max_tokens = AGENT_TOKEN_CONFIG[agent_name].get(thinking_level, max_tokens)
 
-    preferred_model = None
+    preferred_models = None
     if agent_name and agent_name in AGENT_MODEL_CONFIG:
-        preferred_model = AGENT_MODEL_CONFIG[agent_name]
+        preferred_models = AGENT_MODEL_CONFIG[agent_name]
 
     kwargs = {
         "temperature": temperature,
@@ -53,7 +53,7 @@ def get_openrouter_llm(
     }
 
     return OpenRouterLoadBalancer(
-        api_key=api_key, preferred_model=preferred_model, **kwargs
+        api_key=api_key, preferred_models=preferred_models, **kwargs
     )
 
 

@@ -18,8 +18,8 @@ DEFAULT_FREE_MODELS: List[str] = [
 
     "inclusionai/ling-3.0-flash-fin:free",
 
-    "google/gemma-4-26b-a4b-it:free",
-    "google/gemma-4-31b-it:free",
+    # "google/gemma-4-26b-a4b-it:free",
+    # "google/gemma-4-31b-it:free",
 
     "dots-studio/dots-3-note-preview:free",
 
@@ -106,7 +106,6 @@ class OpenRouterLoadBalancer:
         self,
         api_key: str | None = None,
         base_models: List[str] | None = None,
-        preferred_model: str | None = None,
         **kwargs,
     ):
         self.api_key = api_key 
@@ -116,11 +115,8 @@ class OpenRouterLoadBalancer:
         env_model = os.getenv("OPEN_ROUTER_MODEL")
         if env_model:
             raw_pool.insert(0, env_model)
-        if preferred_model:
-            raw_pool.insert(0, preferred_model)
 
         self.model_pool = list(dict.fromkeys(raw_pool))
-
 
     def _get_ordered_models(self) -> List[str]:
         with OpenRouterLoadBalancer._lock:
