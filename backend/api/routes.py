@@ -29,6 +29,7 @@ from api.models import (
 from api.dependencies import (
     get_auth_service,
     get_analysis_service,
+    get_cache_service,
     get_current_user,
     get_current_user_optional,
     get_user_repository,
@@ -36,6 +37,7 @@ from api.dependencies import (
 from repositories.user_repository import UserRepository
 from services.auth_service import AuthService
 from services.analysis_service import AnalysisService
+from services.cache_service import CacheService
 from core.error import (
     AgentError,
     AuthenticationError,
@@ -120,7 +122,21 @@ async def request_otp(
     request: Request,
     body: RequestOTPRequest,
     auth_service: AuthService = Depends(get_auth_service),
+    cache_service: CacheService = Depends(get_cache_service),
 ):
+    email_clean = body.email.lower().strip()
+    if cache_service.is_enabled:
+        otp_key = f"ratelimit:otp:{email_clean}"
+        otp_count = await cache_service.incr_counter(otp_key, ttl_seconds=600)
+        if otp_count > 3:
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "too_many_otp_requests",
+                    "message": "Too many OTP requests for this email. Please wait 10 minutes before requesting again.",
+                },
+            )
+
     try:
         res = await auth_service.request_registration_otp(
             body.email, body.password, body.name
@@ -278,11 +294,32 @@ async def analyze(
     openrouter_api_key: Optional[str] = Header(None, alias="OpenRouter-API-Key"),
     user: Optional[AuthUser] = Depends(get_current_user_optional),
     analysis_service: AnalysisService = Depends(get_analysis_service),
+    cache_service: CacheService = Depends(get_cache_service),
 ):
     ticker = body.ticker.strip().upper()
     logger.info(f"Analyze request received | ticker={ticker}")
 
     client_ip = get_client_ip(request)
+
+    if cache_service.is_enabled:
+        if user is None:
+            ip_key = f"ratelimit:ip:{client_ip}"
+            ip_count = await cache_service.incr_counter(ip_key, ttl_seconds=3600)
+            if ip_count > 3:
+                raise SearchLimitReachedError(
+                    "You have reached the limit of 3 free searches per hour. Please sign up or log in to search more."
+                )
+        else:
+            user_key = f"ratelimit:user:{user.id}"
+            user_count = await cache_service.incr_counter(user_key, ttl_seconds=3600)
+            if user_count > 10:
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "error": "rate_limit_exceeded",
+                        "message": "Hourly search limit reached (10 searches/hour). Please try again later.",
+                    },
+                )
 
     if user is None:
         search_count = await analysis_service.get_ip_search_count(client_ip)
@@ -297,6 +334,32 @@ async def analyze(
     analysis_service.validate_api_keys(openrouter_api_key)
     analysis_service.validate_ticker_format(ticker)
     await analysis_service.validate_ticker_exists(ticker)
+
+    analysis_type = "full" if body.include_debate else "basic"
+    cache_key = f"analysis:{ticker}:{analysis_type}"
+    lock_key = f"lock:analysis:{ticker}:{analysis_type}"
+
+    # 1. Check Redis Cache
+    cached_report = await cache_service.get_json(cache_key)
+    if cached_report:
+        logger.info(f"Analysis cache HIT | ticker={ticker}")
+        if user is None:
+            await analysis_service.increment_ip_search(client_ip)
+        return AnalyzeResponse(**cached_report)
+
+    # 2. Check Concurrent Lock if another request is running the same analysis (10-minute TTL for long-running graphs)
+    lock_acquired = await cache_service.acquire_lock(lock_key, ttl_seconds=600)
+    if not lock_acquired:
+        logger.info(f"Concurrent lock active for ticker={ticker}. Polling cache every 2 mins (max 10 mins)...")
+        # Poll every 2 minutes (120s) for up to 5 iterations (10 minutes total) to minimize Upstash HTTP API calls
+        for _ in range(5):
+            await asyncio.sleep(120)
+            cached_report = await cache_service.get_json(cache_key)
+            if cached_report:
+                logger.info(f"Analysis cache HIT via polling lock | ticker={ticker}")
+                if user is None:
+                    await analysis_service.increment_ip_search(client_ip)
+                return AnalyzeResponse(**cached_report)
 
     try:
         logger.info(f"Starting graph execution | ticker={ticker}")
@@ -317,8 +380,7 @@ async def analyze(
 
         data_bundle = final_state.get("data_bundle", {})
 
-        return AnalyzeResponse(
-
+        response = AnalyzeResponse(
             ticker=ticker,
             news_report=final_state.get("news_analyst_report", {}),
             technical_report=final_state.get("technical_analyst_report", {}),
@@ -339,6 +401,11 @@ async def analyze(
             bear_thesis=final_state.get("investment_debate", {}).get("bear_thesis"),
             status="success",
         )
+
+        # Cache response in Redis for 20 minutes (1200s)
+        await cache_service.set_json(cache_key, response.model_dump(), ttl_seconds=1200)
+
+        return response
 
     except AgentError as e:
         status_code, error_code = next(
@@ -395,8 +462,8 @@ async def analyze(
                     "message": "Our AI analysis engine encountered a temporary issue while compiling report data. Please try again in a moment.",
                 },
             )
-
-
+    finally:
+        await cache_service.release_lock(lock_key)
 
 
 @router.post("/analyses/save", response_model=SaveAnalysisResponse)

@@ -5,6 +5,7 @@ from repositories.analysis_repository import AnalysisRepository
 from services.auth_service import AuthService
 from services.analysis_service import AnalysisService
 from core.exceptions import InvalidTokenError
+from services.cache_service import CacheService
 from api.models import AuthUser
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -22,6 +23,10 @@ def get_auth_service(
     user_repository: UserRepository = Depends(get_user_repository),
 ) -> AuthService:
     return AuthService(user_repository)
+
+
+def get_cache_service() -> CacheService:
+    return CacheService()
 
 
 def get_analysis_service(
@@ -77,4 +82,3 @@ async def get_current_user_optional(
         )
     except Exception:
         raise InvalidTokenError("Your session has expired. Please sign in again.")
-
