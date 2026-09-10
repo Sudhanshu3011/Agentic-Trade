@@ -13,6 +13,10 @@ from core.exceptions import (
     DatabaseOperationError,
     ConfigurationError,
     InvalidAPIKeyError,
+    InvalidOTPError,
+    OTPExpiredError,
+    TooManyOTPAttemptsError,
+    EmailDeliveryError,
 )
 from core.logging import get_logger
 
@@ -122,3 +126,36 @@ def register_exception_handlers(app: FastAPI):
             status_code=401,
             content={"detail": {"error": "invalid_api_key", "message": exc.message}},
         )
+
+    @app.exception_handler(InvalidOTPError)
+    async def invalid_otp_handler(request: Request, exc: InvalidOTPError):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": {"error": "invalid_otp", "message": exc.message}},
+        )
+
+    @app.exception_handler(OTPExpiredError)
+    async def otp_expired_handler(request: Request, exc: OTPExpiredError):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": {"error": "otp_expired", "message": exc.message}},
+        )
+
+    @app.exception_handler(TooManyOTPAttemptsError)
+    async def too_many_otp_attempts_handler(
+        request: Request, exc: TooManyOTPAttemptsError
+    ):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": {"error": "too_many_otp_attempts", "message": exc.message}},
+        )
+
+    @app.exception_handler(EmailDeliveryError)
+    async def email_delivery_error_handler(
+        request: Request, exc: EmailDeliveryError
+    ):
+        return JSONResponse(
+            status_code=503,
+            content={"detail": {"error": "email_delivery_failed", "message": exc.message}},
+        )
+
