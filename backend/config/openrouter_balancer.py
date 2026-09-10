@@ -106,14 +106,27 @@ class OpenRouterLoadBalancer:
         self,
         api_key: str | None = None,
         base_models: List[str] | None = None,
+        preferred_models: List[str] | str | None = None,
         **kwargs,
     ):
         self.api_key = api_key 
+        kwargs.pop("preferred_models", None)
+        kwargs.pop("preferred_model", None)
         self.kwargs = kwargs
+        self._has_preferred = bool(preferred_models)
 
-        raw_pool = list(base_models or DEFAULT_FREE_MODELS)
+        if preferred_models:
+            if isinstance(preferred_models, str):
+                preferred_models = [preferred_models]
+            raw_pool = list(preferred_models)
+            for m in (base_models or DEFAULT_FREE_MODELS):
+                if m not in raw_pool:
+                    raw_pool.append(m)
+        else:
+            raw_pool = list(base_models or DEFAULT_FREE_MODELS)
+
         env_model = os.getenv("OPEN_ROUTER_MODEL")
-        if env_model:
+        if env_model and env_model not in raw_pool:
             raw_pool.insert(0, env_model)
 
         self.model_pool = list(dict.fromkeys(raw_pool))
@@ -127,8 +140,11 @@ class OpenRouterLoadBalancer:
         if n == 0:
             return DEFAULT_FREE_MODELS
 
-        start_idx = idx % n
-        rotated = self.model_pool[start_idx:] + self.model_pool[:start_idx]
+        if self._has_preferred:
+            rotated = list(self.model_pool)
+        else:
+            start_idx = idx % n
+            rotated = self.model_pool[start_idx:] + self.model_pool[:start_idx]
 
         healthy = [m for m in rotated if ModelHealthTracker.is_healthy(m)]
         degraded = [m for m in rotated if not ModelHealthTracker.is_healthy(m)]
@@ -143,7 +159,7 @@ class OpenRouterLoadBalancer:
 
         primary_in_flight = ModelHealthTracker.get_in_flight(ordered[0])
         logger.info(
-            f"[LoadBalancer] Round-robin call #{idx} | primary='{ordered[0]}' (in_flight={primary_in_flight}) | pool_size={len(ordered)} | healthy={len(healthy)}"
+            f"[LoadBalancer] Call #{idx} | primary='{ordered[0]}' (in_flight={primary_in_flight}) | pool_size={len(ordered)} | healthy={len(healthy)}"
         )
         return ordered
 
@@ -155,9 +171,12 @@ class OpenRouterLoadBalancer:
         runnables = []
         for i, model_name in enumerate(candidate_models):
             llm_kwargs = dict(self.kwargs)
+            llm_kwargs.pop("preferred_models", None)
+            llm_kwargs.pop("preferred_model", None)
             llm_kwargs["model"] = model_name
             if self.api_key:
                 llm_kwargs["openrouter_api_key"] = self.api_key
+
 
             llm_inst = ChatOpenRouter(**llm_kwargs)
             base_runnable = (
