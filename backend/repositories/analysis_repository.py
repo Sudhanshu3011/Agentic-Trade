@@ -1,7 +1,9 @@
 from bson import ObjectId
+from typing import Optional
 from core.database import get_db
 from core.exceptions import DatabaseOperationError
 from core.logging import get_logger
+from services.cache_service import CacheService
 
 logger = get_logger(__name__)
 
@@ -9,8 +11,8 @@ logger = get_logger(__name__)
 class AnalysisRepository:
     MAX_ANALYSES_PER_USER = 5
 
-    def __init__(self):
-        pass
+    def __init__(self, cache_service: Optional[CacheService] = None):
+        self.cache = cache_service or CacheService()
 
     @property
     def analyses_collection(self):
@@ -54,12 +56,28 @@ class AnalysisRepository:
                     f"Pruned {len(ids_to_delete)} old analyses for user={user_id}"
                 )
 
+            # Invalidate user past analysis metadata cache in Redis
+            if self.cache.is_enabled:
+                cache_key = f"user:analyses:{user_id}"
+                await self.cache.delete(cache_key)
+                logger.info(f"[AnalysisRepository] Invalidated user analyses cache | user={user_id}")
+
             return analysis_id
         except Exception as e:
             raise DatabaseOperationError(f"Failed to save analysis: {e}")
 
     async def get_user_analyses(self, user_id: str, limit: int = 5) -> list[dict]:
         try:
+            cache_key = f"user:analyses:{user_id}"
+
+            # 1. Try fetching metadata list from Upstash Redis Cache first
+            if self.cache.is_enabled:
+                cached_list = await self.cache.get_json(cache_key)
+                if cached_list:
+                    logger.info(f"[AnalysisRepository] Past analyses cache HIT | user={user_id}")
+                    return cached_list
+
+            # 2. On Cache MISS: Query MongoDB for metadata only
             effective_limit = min(limit, self.MAX_ANALYSES_PER_USER)
             cursor = self.analyses_collection.find(
                 {"user_id": user_id},
@@ -90,12 +108,28 @@ class AnalysisRepository:
                 sort=[("analyzed_at", -1)],
                 limit=effective_limit,
             )
-            return await cursor.to_list(length=effective_limit)
+            raw_list = await cursor.to_list(length=effective_limit)
+
+            formatted_list = []
+            for doc in raw_list:
+                doc_copy = dict(doc)
+                if "_id" in doc_copy:
+                    doc_copy["id"] = str(doc_copy["_id"])
+                    del doc_copy["_id"]
+                formatted_list.append(doc_copy)
+
+            # 3. Store formatted metadata list in Upstash Redis (1 hour TTL)
+            if self.cache.is_enabled:
+                await self.cache.set_json(cache_key, formatted_list, ttl_seconds=3600)
+                logger.info(f"[AnalysisRepository] Cached user analyses metadata in Redis | user={user_id}")
+
+            return formatted_list
         except Exception as e:
             raise DatabaseOperationError(f"Failed to fetch user analyses: {e}")
 
     async def get_analysis_by_id(self, analysis_id: str, user_id: str) -> dict | None:
         try:
+            # Full analysis details fetched directly from MongoDB on click
             return await self.analyses_collection.find_one(
                 {
                     "_id": ObjectId(analysis_id),

@@ -50,6 +50,20 @@ export function SearchView({
   useEffect(() => {
     hasHydrated = true;
     setHasApiKey(!!getSavedOpenRouterApiKey()?.trim());
+
+    const handleKeyChange = (e: Event) => {
+      const customEvt = e as CustomEvent<{ hasKey?: boolean }>;
+      if (typeof customEvt.detail?.hasKey === "boolean") {
+        setHasApiKey(customEvt.detail.hasKey);
+      } else {
+        setHasApiKey(!!getSavedOpenRouterApiKey()?.trim());
+      }
+    };
+
+    window.addEventListener("openrouter-key-changed", handleKeyChange);
+    return () => {
+      window.removeEventListener("openrouter-key-changed", handleKeyChange);
+    };
   }, []);
 
   useEffect(() => {
