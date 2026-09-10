@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-from config.agent_config import AGENT_TOKEN_CONFIG
+from config.agent_config import AGENT_TOKEN_CONFIG, AGENT_MODEL_CONFIG
 from config.openrouter_balancer import OpenRouterLoadBalancer
 
 load_dotenv()
@@ -37,6 +37,10 @@ def get_openrouter_llm(
     if agent_name and agent_name in AGENT_TOKEN_CONFIG:
         max_tokens = AGENT_TOKEN_CONFIG[agent_name].get(thinking_level, max_tokens)
 
+    preferred_models = None
+    if agent_name and agent_name in AGENT_MODEL_CONFIG:
+        preferred_models = AGENT_MODEL_CONFIG[agent_name]
+
     kwargs = {
         "temperature": temperature,
         "top_p": top_p,
@@ -48,5 +52,8 @@ def get_openrouter_llm(
         },
     }
 
-    return OpenRouterLoadBalancer(api_key=api_key, **kwargs)
+    return OpenRouterLoadBalancer(
+        api_key=api_key, preferred_models=preferred_models, **kwargs
+    )
+
 
