@@ -40,3 +40,21 @@ AGENT_TOKEN_CONFIG = {
         "high": 2500,
     },
 }
+
+import os
+
+DEFAULT_MODEL = os.getenv(
+    "OPEN_ROUTER_MODEL", "nvidia/nemotron-3-super-120b-a12b:free"
+)
+
+AGENT_MODEL_CONFIG = {
+    "FundamentalAnalyst": os.getenv("FUNDAMENTAL_ANALYST_MODEL", DEFAULT_MODEL),
+    "MarketAnalyst": os.getenv("MARKET_ANALYST_MODEL", DEFAULT_MODEL),
+    "NewsAnalyst": os.getenv("NEWS_ANALYST_MODEL", DEFAULT_MODEL),
+    "SectorAnalyst": os.getenv("SECTOR_ANALYST_MODEL", DEFAULT_MODEL),
+    "TechnicalAnalyst": os.getenv("TECHNICAL_ANALYST_MODEL", DEFAULT_MODEL),
+    "ResearchManager": os.getenv("RESEARCH_MANAGER_MODEL", DEFAULT_MODEL),
+    "BullResearcher": os.getenv("BULL_RESEARCHER_MODEL", DEFAULT_MODEL),
+    "BearResearcher": os.getenv("BEAR_RESEARCHER_MODEL", DEFAULT_MODEL),
+}
+
