@@ -637,14 +637,18 @@ export function saveOpenRouterApiKey(key: string) {
         localStorage.setItem("openrouter_api_key_guest", trimmed);
       }
     } catch { }
-    return;
+  } else {
+    try {
+      if (!trimmed) {
+        localStorage.removeItem(`openrouter_api_key_${user.email}`);
+      } else {
+        localStorage.setItem(`openrouter_api_key_${user.email}`, trimmed);
+      }
+    } catch { }
   }
+
   try {
-    if (!trimmed) {
-      localStorage.removeItem(`openrouter_api_key_${user.email}`);
-    } else {
-      localStorage.setItem(`openrouter_api_key_${user.email}`, trimmed);
-    }
+    window.dispatchEvent(new CustomEvent("openrouter-key-changed", { detail: { hasKey: !!trimmed } }));
   } catch { }
 }
 

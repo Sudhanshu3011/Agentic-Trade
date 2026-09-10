@@ -100,6 +100,9 @@ class AuthService:
         if existing_user:
             raise UserAlreadyExistsError("An account already exists with this email address.")
 
+        if await self.otp_repository.is_cooldown_active(email):
+            raise TooManyOTPAttemptsError("Please wait 30 seconds before requesting another verification code.")
+
         password_hash = await asyncio.to_thread(self._hash_password, password)
         otp_code = f"{secrets.randbelow(900000) + 100000}"
         otp_hash = self._hash_otp(otp_code)

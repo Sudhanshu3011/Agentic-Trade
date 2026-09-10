@@ -85,6 +85,8 @@ export function AppGate() {
   const handleAuthed = (authedUser: AuthUser) => {
     setUser(authedUser);
     setHasSavedKey(!!getSavedOpenRouterApiKey()?.trim());
+    setShowAuth(false);
+    setAuthError(null);
   };
 
   const handleLogout = () => {

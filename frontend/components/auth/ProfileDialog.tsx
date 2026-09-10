@@ -41,6 +41,20 @@ export function ProfileDialog({ user, isOpen, onClose, onLogout }: ProfileDialog
       setKeyError(null);
       setPwState({ error: null, loading: false });
     }
+
+    const handleKeyChange = (e: Event) => {
+      const customEvt = e as CustomEvent<{ hasKey?: boolean }>;
+      if (typeof customEvt.detail?.hasKey === "boolean") {
+        setHasApiKey(customEvt.detail.hasKey);
+      } else {
+        setHasApiKey(!!getSavedOpenRouterApiKey()?.trim());
+      }
+    };
+
+    window.addEventListener("openrouter-key-changed", handleKeyChange);
+    return () => {
+      window.removeEventListener("openrouter-key-changed", handleKeyChange);
+    };
   }, [isOpen]);
 
   const handleSaveApiKey = async (e: React.FormEvent) => {
@@ -163,7 +177,20 @@ export function ProfileDialog({ user, isOpen, onClose, onLogout }: ProfileDialog
             </div>
 
             <form onSubmit={handleSaveApiKey} className="flex flex-col gap-2.5">
-              <label className="font-mono text-[10px] font-bold tracking-wider text-neutral-500">OPENROUTER API KEY</label>
+              <div className="flex items-center justify-between">
+                <label className="font-mono text-[10px] font-bold tracking-wider text-neutral-500">OPENROUTER API KEY</label>
+                {hasApiKey ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-mono font-bold text-emerald-700 border border-emerald-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    VERIFIED &amp; ACTIVE
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-0.5 text-[9px] font-mono font-bold text-red-600 border border-red-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                    NOT CONFIGURED
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400">
                   <Key size={14} />
