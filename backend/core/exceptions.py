@@ -62,3 +62,8 @@ class OTPExpiredError(DomainError):
 
 class TooManyOTPAttemptsError(DomainError):
     pass
+
+
+class EmailDeliveryError(DomainError):
+    pass
+

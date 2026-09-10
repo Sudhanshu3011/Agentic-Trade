@@ -1,65 +1,25 @@
 import os
-import smtplib
-import asyncio
-import secrets
-import time
-from pathlib import Path
-from email.utils import formatdate, make_msgid
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import httpx
 from core.logging import get_logger
+from core.exceptions import EmailDeliveryError
 
 logger = get_logger(__name__)
 
 
 class EmailService:
     def __init__(self):
-        self.smtp_host = os.getenv("SMTP_HOST")
-        self.smtp_port = int(os.getenv("SMTP_PORT", 587))
-        self.username = os.getenv("SMTP_USERNAME")
-        self.password = os.getenv("SMTP_PASSWORD")
-        self.sender_email = os.getenv("SENDER_EMAIL", self.username or "noreply@artha-analytics.com")
+        self.brevo_api_key = os.getenv("BREVO_API_KEY")
+        self.sender_email = os.getenv("SENDER_EMAIL", "arthaanalytics.co@gmail.com")
+        self.sender_name = os.getenv("SENDER_NAME", "Artha Analytics")
         self.logo_url = os.getenv("APP_LOGO_URL")
 
-    def _send_sync(self, recipient_email: str, otp_code: str) -> None:
-        if not self.smtp_host or not self.username or not self.password:
-            logger.info(
-                f"[EmailService - Local Dev] SMTP credentials missing. OTP for {recipient_email} is: [{otp_code}]"
-            )
-            return
-
-        domain = self.sender_email.split("@")[-1] if "@" in self.sender_email else "artha-analytics.com"
-
-        # Construct root multipart/related container
-        msg = MIMEMultipart("related")
-        msg["Subject"] = f"{otp_code} is your Artha Analytics Verification Code"
-        msg["From"] = f"Artha Analytics <{self.sender_email}>"
-        msg["To"] = recipient_email
-        msg["Date"] = formatdate(localtime=True)
-        msg["Message-ID"] = make_msgid(idstring=secrets.token_hex(6), domain=domain)
-        msg["X-Mailer"] = "ArthaAnalytics-Mailer/1.0"
-        msg["Auto-Submitted"] = "auto-generated"
-
-        msg_alternative = MIMEMultipart("alternative")
-        msg.attach(msg_alternative)
-
-        # Plaintext fallback for strict text clients & anti-spam scoring
-        text_body = (
-            f"Artha Analytics Verification Code: {otp_code}\n\n"
-            f"Please enter this 6-digit code to complete your account registration.\n"
-            f"This code will expire in 5 minutes.\n\n"
-            f"If you did not request this code, please ignore this email.\n\n"
-            f"© Artha Analytics · Multi-Agent AI. Singular Market Edge."
-        )
-        msg_alternative.attach(MIMEText(text_body, "plain", "utf-8"))
-
-        # Determine Logo HTML element (Hosted URL > HTML/CSS Brand Emblem matching AuthCard.tsx)
+    def _generate_html_body(self, otp_code: str) -> str:
         if self.logo_url:
-            logo_html = f'<img src="{self.logo_url}" alt="Artha Analytics" width="180" style="display: block; margin: 0 auto 20px auto; border: 0; outline: none; text-decoration: none;" />'
+            logo_html = f'<img src="{self.logo_url}" alt="{self.sender_name}" width="180" style="display: block; margin: 0 auto 20px auto; border: 0; outline: none; text-decoration: none;" />'
         else:
-            logo_html = """
+            logo_html = f"""
             <div style="text-align: center; margin-bottom: 24px;">
-              <div style="font-size: 22px; font-weight: 700; color: #09090b; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">Artha Analytics</div>
+              <div style="font-size: 22px; font-weight: 700; color: #09090b; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">{self.sender_name}</div>
               <div style="display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin-top: 4px;">
                 <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: #d4a84c; vertical-align: middle;"></span>
                 <span style="font-size: 9.5px; font-weight: 700; color: #d4a84c; font-family: 'Courier New', Courier, monospace; letter-spacing: 1.8px; text-transform: uppercase; vertical-align: middle;">MULTI-AGENT AI. SINGULAR MARKET EDGE.</span>
@@ -67,8 +27,7 @@ class EmailService:
             </div>
             """
 
-        # HTML body matching AuthCard design system
-        html_body = f"""
+        return f"""
         <!DOCTYPE html>
         <html>
         <head>
@@ -92,7 +51,7 @@ class EmailService:
             <div class="gold-bar"></div>
             {logo_html}
             <div class="title">Verify Your Email Address</div>
-            <div class="desc">Please use the verification code below to complete your registration on Artha Analytics:</div>
+            <div class="desc">Please use the verification code below to complete your registration on {self.sender_name}:</div>
             <div class="otp-container">
               <span class="otp-code">{otp_code}</span>
             </div>
@@ -107,22 +66,55 @@ class EmailService:
         </html>
         """
 
-        msg_alternative.attach(MIMEText(html_body, "html", "utf-8"))
+    async def send_otp_email(self, recipient_email: str, otp_code: str) -> None:
+        html_body = self._generate_html_body(otp_code)
+
+        is_placeholder = (
+            not self.brevo_api_key
+            or "xxxx" in self.brevo_api_key.lower()
+            or "your_" in self.brevo_api_key.lower()
+        )
+        if is_placeholder:
+            logger.info(
+                f"[EmailService - Local Dev] Valid BREVO_API_KEY not configured. OTP for {recipient_email} is: [{otp_code}]"
+            )
+            return
+
+        url = "https://api.brevo.com/v3/smtp/email"
+        headers = {
+            "api-key": self.brevo_api_key,
+            "accept": "application/json",
+            "content-type": "application/json",
+        }
+        sender_addr = self.sender_email
+        if "<" in sender_addr:
+            sender_addr = sender_addr.split("<")[-1].rstrip(">").strip()
+
+        payload = {
+            "sender": {
+                "name": self.sender_name,
+                "email": sender_addr,
+            },
+            "to": [
+                {
+                    "email": recipient_email
+                }
+            ],
+            "subject": f"{otp_code} is your Artha Analytics Verification Code",
+            "htmlContent": html_body,
+        }
 
         try:
-            if self.smtp_port == 465:
-                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, timeout=10) as server:
-                    server.login(self.username, self.password)
-                    server.sendmail(self.sender_email, [recipient_email], msg.as_string())
-            else:
-                with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10) as server:
-                    server.starttls()
-                    server.login(self.username, self.password)
-                    server.sendmail(self.sender_email, [recipient_email], msg.as_string())
-            logger.info(f"[EmailService] Sent OTP verification email to {recipient_email}")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code not in (200, 201):
+                    logger.error(f"[EmailService] Brevo API error ({resp.status_code}): {resp.text}")
+                    raise EmailDeliveryError(
+                        f"Failed to deliver verification email via Brevo API ({resp.status_code}). Please ensure '{sender_addr}' is verified in Brevo Dashboard -> Senders."
+                    )
+                logger.info(f"[EmailService] Sent OTP verification email via Brevo REST API (HTTPS :443) to {recipient_email}")
+        except EmailDeliveryError:
+            raise
         except Exception as e:
-            logger.error(f"[EmailService] Failed to send email via SMTP: {e}. OTP was: [{otp_code}]")
-            raise e
-
-    async def send_otp_email(self, recipient_email: str, otp_code: str) -> None:
-        await asyncio.to_thread(self._send_sync, recipient_email, otp_code)
+            logger.error(f"[EmailService] Unexpected error connecting to Brevo API: {e}")
+            raise EmailDeliveryError("Unable to reach verification email provider. Please try again in a few moments.")

@@ -648,6 +648,50 @@ export function saveOpenRouterApiKey(key: string) {
   } catch { }
 }
 
+function formatAuthErrorMessage(res: Response, errorBody: any, defaultMsg: string): string {
+  let rawMsg = "";
+  let errorCode = "";
+
+  if (typeof errorBody?.detail === "string") {
+    rawMsg = errorBody.detail;
+  } else if (Array.isArray(errorBody?.detail) && errorBody.detail.length > 0) {
+    const firstErr = errorBody.detail[0];
+    rawMsg = typeof firstErr === "string"
+      ? firstErr
+      : (firstErr?.msg ? firstErr.msg.replace(/^Value error,\s*/i, "") : "");
+  } else if (typeof errorBody?.detail === "object" && errorBody.detail) {
+    rawMsg = errorBody.detail.message || "";
+    errorCode = errorBody.detail.error || "";
+  } else if (typeof errorBody?.message === "string") {
+    rawMsg = errorBody.message;
+  }
+
+  if (res.status === 429) {
+    if (errorCode === "too_many_otp_attempts") {
+      return "Too many failed attempts. This verification code has been invalidated for security. Please request a new code.";
+    }
+    return "Too many requests in a short time. Please wait a minute before requesting another code.";
+  }
+
+  if (res.status === 409 || errorCode === "email_exists") {
+    return "An account with this email address already exists. Please switch to the LOGIN tab to sign in.";
+  }
+
+  if (res.status === 503 || errorCode === "email_delivery_failed") {
+    return rawMsg || "Unable to send verification email right now. Please verify your email address or try again in a few moments.";
+  }
+
+  if (res.status === 401 || errorCode === "invalid_credentials") {
+    return rawMsg || "Incorrect email or password. Please check your credentials and try again.";
+  }
+
+  if (res.status === 500) {
+    return "Server is temporarily busy. Please try again in a moment.";
+  }
+
+  return rawMsg || defaultMsg;
+}
+
 export async function requestRegistrationOTP({
   email,
   password,
@@ -667,31 +711,20 @@ export async function requestRegistrationOTP({
   } catch {
     throw new AnalysisError({
       title: "CONNECTION FAILED",
-      message: "Unable to reach the authentication server.",
+      message: "Unable to reach the authentication server. Please check your internet connection.",
     });
   }
 
   if (!res.ok) {
-    let errorMessage = "";
+    let errorBody: any = {};
     try {
-      const errorBody = await res.json();
-      if (typeof errorBody.detail === "string") {
-        errorMessage = errorBody.detail;
-      } else if (Array.isArray(errorBody.detail) && errorBody.detail.length > 0) {
-        const firstErr = errorBody.detail[0];
-        errorMessage = typeof firstErr === "string"
-          ? firstErr
-          : (firstErr?.msg ? firstErr.msg.replace(/^Value error,\s*/i, "") : "");
-      } else if (typeof errorBody.detail === "object" && errorBody.detail?.message) {
-        errorMessage = errorBody.detail.message;
-      } else if (typeof errorBody.message === "string") {
-        errorMessage = errorBody.message;
-      }
+      errorBody = await res.json();
     } catch { }
 
+    const errorMessage = formatAuthErrorMessage(res, errorBody, "Unable to send verification code.");
     throw new AnalysisError({
-      title: "REQUEST FAILED",
-      message: errorMessage || "Unable to send verification code.",
+      title: res.status === 409 ? "ACCOUNT EXISTS" : "REQUEST FAILED",
+      message: errorMessage,
     });
   }
 
@@ -715,31 +748,20 @@ export async function verifyRegistrationOTP({
   } catch {
     throw new AnalysisError({
       title: "CONNECTION FAILED",
-      message: "Unable to reach the authentication server.",
+      message: "Unable to reach the authentication server. Please check your internet connection.",
     });
   }
 
   if (!res.ok) {
-    let errorMessage = "";
+    let errorBody: any = {};
     try {
-      const errorBody = await res.json();
-      if (typeof errorBody.detail === "string") {
-        errorMessage = errorBody.detail;
-      } else if (Array.isArray(errorBody.detail) && errorBody.detail.length > 0) {
-        const firstErr = errorBody.detail[0];
-        errorMessage = typeof firstErr === "string"
-          ? firstErr
-          : (firstErr?.msg ? firstErr.msg.replace(/^Value error,\s*/i, "") : "");
-      } else if (typeof errorBody.detail === "object" && errorBody.detail?.message) {
-        errorMessage = errorBody.detail.message;
-      } else if (typeof errorBody.message === "string") {
-        errorMessage = errorBody.message;
-      }
+      errorBody = await res.json();
     } catch { }
 
+    const errorMessage = formatAuthErrorMessage(res, errorBody, "Invalid verification code.");
     throw new AnalysisError({
       title: "VERIFICATION FAILED",
-      message: errorMessage || "Invalid verification code.",
+      message: errorMessage,
     });
   }
 
@@ -768,39 +790,23 @@ export async function authRequest({
   } catch {
     throw new AnalysisError({
       title: "CONNECTION FAILED",
-      message: "Unable to reach the authentication server.",
+      message: "Unable to reach the authentication server. Please check your internet connection.",
     });
   }
 
   if (!res.ok) {
-    let errorMessage = "";
+    let errorBody: any = {};
     try {
-      const errorBody = await res.json();
-      if (typeof errorBody.detail === "string") {
-        errorMessage = errorBody.detail;
-      } else if (Array.isArray(errorBody.detail) && errorBody.detail.length > 0) {
-        const firstErr = errorBody.detail[0];
-        errorMessage = typeof firstErr === "string" 
-          ? firstErr 
-          : (firstErr?.msg ? firstErr.msg.replace(/^Value error,\s*/i, "") : "");
-      } else if (typeof errorBody.detail === "object" && errorBody.detail?.message) {
-        errorMessage = errorBody.detail.message;
-      } else if (typeof errorBody.message === "string") {
-        errorMessage = errorBody.message;
-      }
+      errorBody = await res.json();
     } catch { }
 
-    if (!errorMessage) {
-      if (res.status === 409) {
-        errorMessage = "An account with this email already exists. Please switch to LOGIN.";
-      } else if (mode === "signup") {
-        errorMessage = "Failed to create account. Please check your details and try again.";
-      } else {
-        errorMessage = "Please check your email and password, then try again.";
-      }
-    } else if (res.status === 409 && !errorMessage.includes("LOGIN")) {
-      errorMessage = `${errorMessage} Please switch to the LOGIN tab to sign in.`;
-    }
+    const errorMessage = formatAuthErrorMessage(
+      res,
+      errorBody,
+      mode === "signup"
+        ? "Failed to create account. Please check your details and try again."
+        : "Please check your email and password, then try again."
+    );
 
     throw new AnalysisError({
       title: res.status === 409 ? "ACCOUNT EXISTS" : "AUTHENTICATION FAILED",
@@ -823,22 +829,23 @@ export async function authenticateWithGoogle(credentialToken: string): Promise<A
   } catch {
     throw new AnalysisError({
       title: "CONNECTION FAILED",
-      message: "Unable to reach the authentication server.",
+      message: "Unable to reach the authentication server. Please check your internet connection.",
     });
   }
 
   const rawData = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    const detail = rawData?.detail ?? rawData ?? {};
+    const errorMessage = formatAuthErrorMessage(res, rawData, "Google authentication failed.");
     throw new AnalysisError({
       title: "AUTHENTICATION FAILED",
-      message: detail.message || "Google authentication failed.",
+      message: errorMessage,
     });
   }
 
   return rawData as AuthResponse;
 }
+
 
 export async function changePassword({
   currentPassword,

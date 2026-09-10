@@ -56,6 +56,7 @@ from core.exceptions import (
     TooManyOTPAttemptsError,
     UserAlreadyExistsError,
     InvalidCredentialsError,
+    EmailDeliveryError,
 )
 from core.logging import get_logger
 from core.database import get_db
@@ -81,7 +82,9 @@ _ERROR_MAP: dict[type, tuple[int, str]] = {
     TooManyOTPAttemptsError: (429, "too_many_otp_attempts"),
     UserAlreadyExistsError: (409, "email_exists"),
     InvalidCredentialsError: (401, "invalid_credentials"),
+    EmailDeliveryError: (503, "email_delivery_failed"),
 }
+
 
 
 def get_client_ip(request: Request) -> str:
