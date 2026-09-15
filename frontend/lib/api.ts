@@ -111,9 +111,13 @@ export interface AnalyseResponse {
   };
 }
 
-// Production backend hosted on Render, overrideable via NEXT_PUBLIC_API_URL
+// Prioritize NEXT_PUBLIC_API_URL from .env.
+// Fall back to dynamic hostname for local network development across devices, or localhost:8000.
 const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "https://artha-analytics-v2.onrender.com"
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined"
+    ? `http://${window.location.hostname}:8000`
+    : "http://localhost:8000")
 ).replace(/\/+$/, "");
 
 const AUTH_TOKEN_KEY = "artha_auth_token";
