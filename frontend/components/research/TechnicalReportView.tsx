@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { Loader2 } from "lucide-react";
 
 import { FormattedText } from "@/components/ui/FormattedText";
 import {
@@ -7,6 +8,45 @@ import {
   TechnicalMomentumChart,
   type TechDataPoint,
 } from "@/components/charts/TechnicalChart";
+
+function AnalysisTextSection({
+  content,
+  isPending,
+  fallback = "No analysis available.",
+}: {
+  content?: string | null;
+  isPending?: boolean;
+  fallback?: string;
+}) {
+  if (content && content.trim()) {
+    return (
+      <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
+        <span className="font-semibold text-zinc-900">Analysis: </span>
+        <FormattedText text={content} />
+      </div>
+    );
+  }
+
+  if (isPending) {
+    return (
+      <div className="p-4 bg-gradient-to-r from-zinc-50/90 via-amber-500/[0.02] to-zinc-50/90 border border-zinc-200/75 rounded-xl text-[13px] text-zinc-600 leading-relaxed shadow-sm space-y-2.5 animate-pulse">
+        <div className="flex items-center gap-2 text-zinc-800 font-medium text-xs">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+          <span>Specialist compiling qualitative technical insights...</span>
+        </div>
+        <div className="h-2.5 w-full bg-gradient-to-r from-zinc-200/70 via-zinc-100 to-zinc-200/70 rounded-md" />
+        <div className="h-2.5 w-4/5 bg-gradient-to-r from-zinc-200/60 via-zinc-100 to-zinc-200/60 rounded-md" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-500 italic leading-relaxed shadow-sm">
+      <span className="font-semibold text-zinc-700 not-italic">Analysis: </span>
+      {fallback}
+    </div>
+  );
+}
 
 const MetricTable = React.memo(function MetricTable({
   rows,
@@ -44,6 +84,7 @@ export function TechnicalReportView({
   chartData,
   accent,
   filenameBase,
+  isPending,
   children,
 }: {
   title: string;
@@ -54,6 +95,7 @@ export function TechnicalReportView({
   chartData?: TechDataPoint[];
   accent?: string;
   filenameBase: string;
+  isPending?: boolean;
   children?: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -116,10 +158,10 @@ export function TechnicalReportView({
             { label: "VWMA (20)", value: vwma.value },
             { label: "Price vs VWMA", value: vwma.price_vs_vwma }
           ]} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.market_structure || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.market_structure}
+            isPending={isPending}
+          />
         </section>
 
         <section>
@@ -133,10 +175,10 @@ export function TechnicalReportView({
             { label: "Squeeze Active", value: bb.squeeze_active ? 'Yes' : 'No' },
             { label: "Bandwidth Trend", value: bb.bandwidth_trend }
           ]} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.volatility || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.volatility}
+            isPending={isPending}
+          />
         </section>
 
         <section>
@@ -149,10 +191,10 @@ export function TechnicalReportView({
             { label: "Bull Divergence", value: rsi.bull_divergence ? 'Yes' : 'No' },
             { label: "Bear Divergence", value: rsi.bear_divergence ? 'Yes' : 'No' }
           ]} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.momentum || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.momentum}
+            isPending={isPending}
+          />
         </section>
 
         <section>
@@ -164,10 +206,10 @@ export function TechnicalReportView({
             { label: "Bias", value: macd.bias },
             { label: "Bullish Cross", value: macd.bullish_cross ? 'Yes' : 'No' }
           ]} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.macd || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.macd}
+            isPending={isPending}
+          />
         </section>
 
         <section>
@@ -178,10 +220,10 @@ export function TechnicalReportView({
             { label: "Volume 5d/20d Ratio", value: vol.ratio_5d_20d },
             { label: "Volume Surge", value: vol.surge ? 'Yes' : 'No' }
           ]} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.volume || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.volume}
+            isPending={isPending}
+          />
         </section>
 
         <section>
@@ -193,10 +235,10 @@ export function TechnicalReportView({
             { label: "% From 52W High", value: pl.pct_from_52w_high },
             { label: "% From 52W Low", value: pl.pct_from_52w_low }
           ]} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.price_levels || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.price_levels}
+            isPending={isPending}
+          />
         </section>
         </div>
       </div>

@@ -130,6 +130,29 @@ async def run_debate_route(
             },
         )
 
+    # Retrieve ground-truth quantitative data for debate baseline
+    tech_data = body.technical_data
+    fund_data = body.fundamental_data
+    comp_info = body.company_info
+
+    if not (tech_data and fund_data and comp_info):
+        # 1. First check new dedicated market data layer cache
+        market_bundle = await cache_service.get_json(f"market:bundle:{ticker}")
+        if market_bundle:
+            tech_data = tech_data or market_bundle.get("technical_data")
+            fund_data = fund_data or market_bundle.get("fundamental_data")
+            comp_info = comp_info or market_bundle.get("company_info")
+
+        # 2. Fallback to analysis cache
+        if not (tech_data and fund_data and comp_info):
+            cached = await cache_service.get_json(f"analysis:{ticker}:basic")
+            if not cached:
+                cached = await cache_service.get_json(f"analysis:{ticker}:full")
+            if cached:
+                tech_data = tech_data or cached.get("technical_data")
+                fund_data = fund_data or cached.get("fundamental_data")
+                comp_info = comp_info or cached.get("company_info")
+
     initial_debate_state = {
         "ticker_of_company": ticker,
         "include_debate": True,
@@ -143,6 +166,14 @@ async def run_debate_route(
         "news_analyst_report": body.news_report or {},
         "sector_analyst_summary": sector_summary or {},
         "sector_analyst_report": body.sector_report or {},
+        "technical_data": tech_data or {},
+        "fundamental_data": fund_data or {},
+        "company_info": comp_info or {},
+        "data_bundle": {
+            "technical_data": tech_data or {},
+            "fundamental_data": fund_data or {},
+            "company_info": comp_info or {},
+        },
         "investment_debate": {
             "bull_thesis": "",
             "bear_thesis": "",

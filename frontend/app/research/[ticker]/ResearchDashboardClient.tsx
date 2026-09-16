@@ -6,6 +6,7 @@ import { Search, Menu, Bookmark, Check, X, Scale, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  fetchStockData,
   analyseTicker,
   runDebate,
   AnalysisError,
@@ -18,11 +19,14 @@ import {
   saveOpenRouterApiKey,
   saveAnalysis,
   isAnalysisSaved,
+  clearAnalysisSaved,
   type AnalyseResponse,
 } from "@/lib/api";
 
 import dynamic from "next/dynamic";
 import { LoadingView } from "@/components/research/LoadingView";
+import { AgentPipelineTracker } from "@/components/research/AgentPipelineTracker";
+import { OverviewVerdictCard } from "@/components/research/OverviewVerdictCard";
 import { AppSidebar, type ViewKey } from "@/components/layout/AppSidebar";
 import { StockMetricsPanel } from "@/components/charts/StockMetricsPanel";
 import {
@@ -89,6 +93,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
   const [view, setView] = useState<ViewKey>("overview");
   const [error, setError] = useState<ErrorInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [isSaved, setIsSaved] = useState(() => isAnalysisSaved(ticker));
@@ -158,6 +163,8 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
       };
       setData(updatedData);
       cacheResponse(ticker, updatedData);
+      clearAnalysisSaved(ticker);
+      setIsSaved(false);
     } catch (err: any) {
       console.error("Failed to run debate", err);
       setDebateError(err?.message || "Failed to generate debate and verdict.");
@@ -194,6 +201,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
     if (cached && retryCount === 0) {
       setData(cached);
       setLoading(false);
+      setIsAnalyzing(false);
       if (includeDebate && !cached.verdict) {
         handleTriggerDebate(cached);
       }
@@ -203,6 +211,29 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
     setLoading(true);
     setError(null);
     setData(null);
+    setIsAnalyzing(true);
+
+    // 1. Immediately fetch deterministic Market Data Layer (<500ms)
+    fetchStockData(ticker, { signal: controller.signal })
+      .then((stockData) => {
+        setData((prev) => ({
+          ...(prev || {}),
+          ...stockData,
+          ticker: stockData.ticker || ticker,
+          news_report: prev?.news_report || "",
+          technical_report: prev?.technical_report || "",
+          fundamental_report: prev?.fundamental_report || "",
+          market_report: prev?.market_report || "",
+          sector_report: prev?.sector_report || "",
+          status: prev?.status === "success" ? "success" : "hydrating",
+        } as AnalyseResponse));
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          console.warn("Market data layer notice:", err);
+        }
+      });
 
     const openrouterApiKey = getSavedOpenRouterApiKey();
     if (!openrouterApiKey || !openrouterApiKey.trim()) {
@@ -217,17 +248,33 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
       signal: controller.signal,
       include_debate: false,
       thinking_mode: thinkingMode,
+      onStockDataLoaded: (stockData) => {
+        setData((prev) => ({
+          ...(prev || {}),
+          ...stockData,
+          ticker: stockData.ticker || ticker,
+          news_report: prev?.news_report || "",
+          technical_report: prev?.technical_report || "",
+          fundamental_report: prev?.fundamental_report || "",
+          market_report: prev?.market_report || "",
+          sector_report: prev?.sector_report || "",
+          status: "hydrating",
+        } as AnalyseResponse));
+        setLoading(false);
+      },
     })
       .then((d) => {
         cacheResponse(ticker, d);
         setData(d);
         setLoading(false);
+        setIsAnalyzing(false);
         if (includeDebate && !d.verdict) {
           handleTriggerDebate(d);
         }
       })
       .catch((e) => {
         if (controller.signal.aborted) return;
+        setIsAnalyzing(false);
         if (e instanceof AnalysisError) {
           if (e.title === "SIGN IN REQUIRED") {
             clearAuthSession();
@@ -365,9 +412,13 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
             <button
               type="button"
               onClick={() => handleTriggerDebate()}
-              disabled={debateLoading}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/20 text-purple-900 transition-all text-[10px] sm:text-[13px] font-semibold cursor-pointer shadow-sm hover:shadow-md hover:scale-105 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
-              title="Run Bull vs Bear Debate & Manager Verdict"
+              disabled={debateLoading || isAnalyzing}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-full border border-purple-500/30 bg-purple-500/10 text-purple-900 transition-all text-[10px] sm:text-[13px] font-semibold shadow-sm whitespace-nowrap ${
+                isAnalyzing
+                  ? "opacity-40 blur-[0.6px] pointer-events-none cursor-not-allowed select-none"
+                  : "hover:bg-purple-500/20 cursor-pointer hover:shadow-md hover:scale-105 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+              }`}
+              title={isAnalyzing ? "Analysis compiling in progress..." : "Run Bull vs Bear Debate & Manager Verdict"}
             >
               <Scale className={`w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-700 shrink-0 ${debateLoading ? "animate-spin" : ""}`} />
               <span className="sm:hidden">{debateLoading ? "Debating..." : "Debate"}</span>
@@ -378,13 +429,25 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
           <button
             type="button"
             onClick={handleSaveResearch}
-            disabled={isSaved || saving}
-            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-full border transition-all text-[10px] sm:text-[13px] font-semibold cursor-pointer shadow-sm whitespace-nowrap ${
-              isSaved
+            disabled={isSaved || saving || isAnalyzing}
+            className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-full border transition-all text-[10px] sm:text-[13px] font-semibold shadow-sm whitespace-nowrap ${
+              isAnalyzing
+                ? "opacity-40 blur-[0.6px] pointer-events-none cursor-not-allowed select-none border-zinc-200 bg-zinc-100 text-zinc-400"
+                : isSaved
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700 cursor-default"
-                : "border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 hover:shadow-md hover:scale-105 active:scale-95"
+                : data?.verdict
+                ? "border-purple-500/40 bg-purple-500/15 hover:bg-purple-500/25 text-purple-900 hover:shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                : "border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 hover:shadow-md hover:scale-105 active:scale-95 cursor-pointer"
             }`}
-            title={isSaved ? "Saved to Past Analysis" : "Save Research to Past Analysis"}
+            title={
+              isAnalyzing
+                ? "Analysis compiling in progress..."
+                : isSaved
+                ? "Saved to Past Analysis"
+                : data?.verdict
+                ? "Save Upgraded Debate & Verdict to Past Analysis"
+                : "Save Research to Past Analysis"
+            }
           >
             {isSaved ? (
               <>
@@ -393,9 +456,15 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
               </>
             ) : (
               <>
-                <Bookmark className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-700 shrink-0" />
+                <Bookmark className={`w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 ${data?.verdict ? "text-purple-700" : "text-amber-700"}`} />
                 <span className="sm:hidden">{saving ? "Saving..." : "Save"}</span>
-                <span className="hidden sm:inline">{saving ? "Saving..." : "Save Research"}</span>
+                <span className="hidden sm:inline">
+                  {saving
+                    ? "Saving..."
+                    : data?.verdict
+                    ? "Save Debate & Verdict"
+                    : "Save Research"}
+                </span>
               </>
             )}
           </button>
@@ -413,7 +482,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
 
       {/* Floating Save Prompt Pop-up */}
       <AnimatePresence>
-        {!isSaved && showSavePrompt && (
+        {!isSaved && showSavePrompt && !isAnalyzing && (
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -505,9 +574,11 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
           <ViewSwitch
             view={view}
             data={data}
+            isAnalyzing={isAnalyzing}
             onTriggerDebate={handleTriggerDebate}
             debateLoading={debateLoading}
             debateError={debateError}
+            onSelectView={setView}
           />
         </main>
       </div>
@@ -517,149 +588,232 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
 
 import { memo } from "react";
 
+const AnalystPendingBanner = ({ role }: { role: string }) => (
+  <div className="mx-auto max-w-[920px] mb-6 flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/80 bg-gradient-to-r from-amber-500/[0.04] via-white to-indigo-500/[0.03] p-4 shadow-[0_2px_12px_rgba(0,0,0,0.02)] backdrop-blur-sm">
+    <div className="flex items-center gap-3">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-950 text-amber-400 shadow-sm border border-zinc-800 shrink-0">
+        <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+      </div>
+      <div>
+        <div className="text-xs font-semibold text-zinc-900 flex items-center gap-2">
+          <span>{role} Dossier in Progress</span>
+          <span className="hidden xs:inline-block h-1 w-1 rounded-full bg-amber-500" />
+          <span className="hidden xs:inline-block font-mono text-[10px] text-zinc-400 font-normal uppercase tracking-wider">Compiling Thesis</span>
+        </div>
+        <div className="text-[12px] text-zinc-500 mt-0.5">
+          Quantitative charts and price regimes are live. The specialist is synthesizing qualitative findings.
+        </div>
+      </div>
+    </div>
+    <div className="hidden sm:flex items-center gap-1.5 rounded-full bg-amber-500/10 border border-amber-500/25 px-3 py-1 font-mono text-[11px] font-medium text-amber-800 shrink-0">
+      <span className="relative flex h-2 w-2">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+      </span>
+      <span>Live Synthesis</span>
+    </div>
+  </div>
+);
+
 const ViewSwitch = memo(function ViewSwitch({
   view,
   data,
+  isAnalyzing,
   onTriggerDebate,
   debateLoading,
   debateError,
+  onSelectView,
 }: {
   view: ViewKey;
   data: AnalyseResponse;
+  isAnalyzing?: boolean;
   onTriggerDebate?: () => void;
   debateLoading?: boolean;
   debateError?: string | null;
+  onSelectView?: (view: ViewKey) => void;
 }) {
   const t = data.ticker;
 
   switch (view) {
     case "overview":
-      return <StockMetricsPanel data={data} />;
-    case "news":
-      if (typeof data.news_report === "string") {
-        return (
-          <ReportView
-            title="News Analyst"
-            ticker={t}
-            status={data.status}
-            content={data.news_report}
-            filenameBase={`${t}_news_report`}
-          />
-        );
-      }
       return (
-        <NewsReportView
-          title="News Analyst"
-          ticker={t}
-          status={data.status}
-          reportData={data.news_report}
-          companyNews={data.company_news}
-          indianNews={data.indian_news}
-          globalNews={data.global_news}
-          filenameBase={`${t}_news_report`}
-        />
+        <div className="space-y-6">
+          {data.verdict && data.verdict.decision && (
+            <OverviewVerdictCard
+              verdict={data.verdict}
+              ticker={t}
+              onViewFullVerdict={() => onSelectView?.("verdict")}
+            />
+          )}
+          <StockMetricsPanel data={data} />
+          {isAnalyzing && <AgentPipelineTracker />}
+        </div>
       );
-    case "technical":
-      if (typeof data.technical_report === "string") {
-        return (
-          <ReportView
-            title="Technical Analyst"
-            ticker={t}
-            status={data.status}
-            content={data.technical_report}
-            filenameBase={`${t}_technical_report`}
-          >
-            <TechnicalTrendChart data={data.charts_data?.technical_history} />
-            <TechnicalVolatilityChart data={data.charts_data?.technical_history} />
-            <TechnicalMomentumChart data={data.charts_data?.technical_history} />
-          </ReportView>
-        );
-      }
+    case "news": {
+      const isPending = Boolean(isAnalyzing && (!data.news_report || (typeof data.news_report === "string" && !data.news_report.trim())));
+      const hasStructuredReport = typeof data.news_report === "object" && data.news_report !== null;
+      const hasNewsData = Boolean(data.company_news || data.indian_news || data.global_news);
+
       return (
-        <TechnicalReportView
-          title="Technical Analyst"
-          ticker={t}
-          status={data.status}
-          reportData={data.technical_report}
-          technicalData={data.technical_data}
-          chartData={data.charts_data?.technical_history}
-          filenameBase={`${t}_technical_report`}
-        />
+        <>
+          {isPending && <AnalystPendingBanner role="News & Sentiment Analyst" />}
+          {hasNewsData || hasStructuredReport ? (
+            <NewsReportView
+              title="News Analyst"
+              ticker={t}
+              status={data.status}
+              reportData={data.news_report}
+              companyNews={data.company_news}
+              indianNews={data.indian_news}
+              globalNews={data.global_news}
+              filenameBase={`${t}_news_report`}
+              isPending={isPending}
+            />
+          ) : (
+            <ReportView
+              title="News Analyst"
+              ticker={t}
+              status={data.status}
+              content={typeof data.news_report === "string" ? data.news_report : ""}
+              filenameBase={`${t}_news_report`}
+            />
+          )}
+        </>
       );
-    case "fundamental":
-      if (typeof data.fundamental_report === "string") {
-        return (
-          <ReportView
-            title="Fundamental Analyst"
-            ticker={t}
-            status={data.status}
-            content={data.fundamental_report}
-            filenameBase={`${t}_fundamental_report`}
-          >
-            <FundamentalGrowthChart data={data.charts_data?.financials_history} />
-            <FundamentalProfitabilityChart data={data.charts_data?.financials_history} />
-          </ReportView>
-        );
-      }
+    }
+    case "technical": {
+      const isPending = Boolean(isAnalyzing && (!data.technical_report || (typeof data.technical_report === "string" && !data.technical_report.trim())));
+      const hasStructuredReport = typeof data.technical_report === "object" && data.technical_report !== null;
+      const hasTechnicalData = Boolean(data.technical_data || data.charts_data?.technical_history);
+
       return (
-        <FundamentalReportView
-          title="Fundamental Analyst"
-          ticker={t}
-          status={data.status}
-          reportData={data.fundamental_report}
-          fundamentalData={data.fundamental_data}
-          chartData={data.charts_data?.financials_history}
-          filenameBase={`${t}_fundamental_report`}
-        />
+        <>
+          {isPending && <AnalystPendingBanner role="Technical Analyst" />}
+          {hasTechnicalData || hasStructuredReport ? (
+            <TechnicalReportView
+              title="Technical Analyst"
+              ticker={t}
+              status={data.status}
+              reportData={data.technical_report}
+              technicalData={data.technical_data}
+              chartData={data.charts_data?.technical_history}
+              filenameBase={`${t}_technical_report`}
+              isPending={isPending}
+            />
+          ) : (
+            <ReportView
+              title="Technical Analyst"
+              ticker={t}
+              status={data.status}
+              content={typeof data.technical_report === "string" ? data.technical_report : ""}
+              filenameBase={`${t}_technical_report`}
+            >
+              <TechnicalTrendChart data={data.charts_data?.technical_history} />
+              <TechnicalVolatilityChart data={data.charts_data?.technical_history} />
+              <TechnicalMomentumChart data={data.charts_data?.technical_history} />
+            </ReportView>
+          )}
+        </>
       );
-    case "market":
-      if (typeof data.market_report === "string") {
-        return (
-          <ReportView
-            title="Market Analyst"
-            ticker={t}
-            status={data.status}
-            content={data.market_report}
-            filenameBase={`${t}_market_report`}
-          />
-        );
-      }
+    }
+    case "fundamental": {
+      const isPending = Boolean(isAnalyzing && (!data.fundamental_report || (typeof data.fundamental_report === "string" && !data.fundamental_report.trim())));
+      const hasStructuredReport = typeof data.fundamental_report === "object" && data.fundamental_report !== null;
+      const hasFundamentalData = Boolean(data.fundamental_data || data.charts_data?.financials_history);
+
       return (
-        <MarketReportView
-          title="Market Analyst"
-          ticker={t}
-          status={data.status}
-          reportData={data.market_report}
-          marketData={data.market_data}
-          filenameBase={`${t}_market_report`}
-        />
+        <>
+          {isPending && <AnalystPendingBanner role="Fundamental Analyst" />}
+          {hasFundamentalData || hasStructuredReport ? (
+            <FundamentalReportView
+              title="Fundamental Analyst"
+              ticker={t}
+              status={data.status}
+              reportData={data.fundamental_report}
+              fundamentalData={data.fundamental_data}
+              chartData={data.charts_data?.financials_history}
+              filenameBase={`${t}_fundamental_report`}
+              isPending={isPending}
+            />
+          ) : (
+            <ReportView
+              title="Fundamental Analyst"
+              ticker={t}
+              status={data.status}
+              content={typeof data.fundamental_report === "string" ? data.fundamental_report : ""}
+              filenameBase={`${t}_fundamental_report`}
+            >
+              <FundamentalGrowthChart data={data.charts_data?.financials_history} />
+              <FundamentalProfitabilityChart data={data.charts_data?.financials_history} />
+            </ReportView>
+          )}
+        </>
       );
-    case "sector":
-      if (typeof data.sector_report === "string") {
-        return (
-          <ReportView
-            title="Sector Analyst"
-            ticker={t}
-            status={data.status}
-            content={data.sector_report}
-            filenameBase={`${t}_sector_report`}
-          />
-        );
-      }
+    }
+    case "market": {
+      const isPending = Boolean(isAnalyzing && (!data.market_report || (typeof data.market_report === "string" && !data.market_report.trim())));
+      const hasStructuredReport = typeof data.market_report === "object" && data.market_report !== null;
+      const hasMarketData = Boolean(data.market_data);
+
       return (
-        <SectorReportView
-          title="Sector Analyst"
-          ticker={t}
-          status={data.status}
-          reportData={data.sector_report}
-          filenameBase={`${t}_sector_report`}
-        />
+        <>
+          {isPending && <AnalystPendingBanner role="Global Market Analyst" />}
+          {hasMarketData || hasStructuredReport ? (
+            <MarketReportView
+              title="Market Analyst"
+              ticker={t}
+              status={data.status}
+              reportData={data.market_report}
+              marketData={data.market_data}
+              filenameBase={`${t}_market_report`}
+              isPending={isPending}
+            />
+          ) : (
+            <ReportView
+              title="Market Analyst"
+              ticker={t}
+              status={data.status}
+              content={typeof data.market_report === "string" ? data.market_report : ""}
+              filenameBase={`${t}_market_report`}
+            />
+          )}
+        </>
       );
+    }
+    case "sector": {
+      const isPending = Boolean(isAnalyzing && (!data.sector_report || (typeof data.sector_report === "string" && !data.sector_report.trim())));
+      const hasStructuredReport = typeof data.sector_report === "object" && data.sector_report !== null;
+
+      return (
+        <>
+          {isPending && <AnalystPendingBanner role="Sector Specialist" />}
+          {hasStructuredReport || isPending ? (
+            <SectorReportView
+              title="Sector Analyst"
+              ticker={t}
+              status={data.status}
+              reportData={data.sector_report}
+              filenameBase={`${t}_sector_report`}
+              isPending={isPending}
+            />
+          ) : (
+            <ReportView
+              title="Sector Analyst"
+              ticker={t}
+              status={data.status}
+              content={typeof data.sector_report === "string" ? data.sector_report : ""}
+              filenameBase={`${t}_sector_report`}
+            />
+          )}
+        </>
+      );
+    }
     case "bull":
       return (
         <BullThesisView
           ticker={t}
           data={data.bull_thesis}
+          isAnalyzing={isAnalyzing}
           onTriggerDebate={onTriggerDebate}
           debateLoading={debateLoading}
           debateError={debateError}
@@ -670,6 +824,7 @@ const ViewSwitch = memo(function ViewSwitch({
         <BearThesisView
           ticker={t}
           data={data.bear_thesis}
+          isAnalyzing={isAnalyzing}
           onTriggerDebate={onTriggerDebate}
           debateLoading={debateLoading}
           debateError={debateError}
@@ -681,6 +836,7 @@ const ViewSwitch = memo(function ViewSwitch({
           ticker={t}
           data={data.verdict}
           chartsData={data.charts_data}
+          isAnalyzing={isAnalyzing}
           onTriggerDebate={onTriggerDebate}
           debateLoading={debateLoading}
           debateError={debateError}

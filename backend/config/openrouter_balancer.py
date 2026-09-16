@@ -86,6 +86,18 @@ class ModelHealthTracker:
                 )
 
 
+AGENT_DISPLAY_ROLES: Dict[str, str] = {
+    "TechnicalAnalyst": "Technical Analyst",
+    "FundamentalAnalyst": "Fundamental Analyst",
+    "MarketAnalyst": "Global Market Analyst",
+    "NewsAnalyst": "News & Sentiment Analyst",
+    "SectorAnalyst": "Sector Specialist",
+    "BullResearcher": "Bull Researcher",
+    "BearResearcher": "Bear Researcher",
+    "ResearchManager": "Research Manager",
+}
+
+
 class OpenRouterLoadBalancer:
     """
     Load balances and manages fallbacks across OpenRouter model pool.
@@ -93,6 +105,7 @@ class OpenRouterLoadBalancer:
     - Dynamic sorting by (health, in-flight load, least-recently degraded).
     - Prevents parallel executing agents from stomping on busy models.
     - Top 3 candidate models for fast failure and gateway timeout prevention.
+    - Explicit failure & fallback routing logging with agent/role identification.
     """
 
     _lock = threading.Lock()
@@ -103,9 +116,12 @@ class OpenRouterLoadBalancer:
         api_key: str | None = None,
         base_models: List[str] | None = None,
         preferred_models: List[str] | str | None = None,
+        agent_name: str | None = None,
         **kwargs,
     ):
         self.api_key = api_key
+        self.agent_name = agent_name or "GeneralAgent"
+        self.display_role = AGENT_DISPLAY_ROLES.get(self.agent_name, self.agent_name)
         kwargs.pop("preferred_models", None)
         kwargs.pop("preferred_model", None)
         self.kwargs = kwargs
@@ -157,7 +173,7 @@ class OpenRouterLoadBalancer:
 
         primary_in_flight = ModelHealthTracker.get_in_flight(ordered[0])
         logger.info(
-            f"[LoadBalancer] Call #{idx} | primary='{ordered[0]}' (in_flight={primary_in_flight}) | pool_size={len(ordered)} | healthy={len(healthy)}"
+            f"[LoadBalancer] Call #{idx} | role='{self.display_role}' | primary='{ordered[0]}' (in_flight={primary_in_flight}) | pool_size={len(ordered)} | healthy={len(healthy)}"
         )
         return ordered
 
@@ -185,20 +201,61 @@ class OpenRouterLoadBalancer:
             def _create_logged_runnable(m_name: str, rank: int, base: Runnable):
                 def _invoke_fn(input_val, config=None, **kwargs):
                     if rank > 0:
+                        failed_model = candidate_models[rank - 1]
                         logger.warning(
-                            f"[LoadBalancer] Fallback triggered! Primary '{primary_name}' failed -> Executing fallback candidate #{rank} '{m_name}'"
+                            f"[LoadBalancer] [Role: {self.display_role}] Fallback triggered! "
+                            f"Model '{failed_model}' failed while performing {self.display_role} -> "
+                            f"Routing to fallback candidate #{rank} '{m_name}'"
                         )
                     with ModelHealthTracker.track_execution(m_name):
                         try:
                             return base.invoke(input_val, config=config, **kwargs)
                         except Exception as exc:
                             ModelHealthTracker.mark_degraded(m_name)
-                            logger.warning(
-                                f"[LoadBalancer] Candidate #{rank} '{m_name}' failed | error={exc}"
-                            )
+                            if rank + 1 < len(candidate_models):
+                                next_candidate = candidate_models[rank + 1]
+                                logger.error(
+                                    f"[LoadBalancer] [Role: {self.display_role}] Model '{m_name}' failed while performing {self.display_role} | "
+                                    f"error={exc} | Routing to next candidate #{rank + 1} '{next_candidate}'"
+                                )
+                            else:
+                                logger.error(
+                                    f"[LoadBalancer] [Role: {self.display_role}] Model '{m_name}' failed while performing {self.display_role} | "
+                                    f"error={exc} | All {len(candidate_models)} candidates in pool exhausted!"
+                                )
                             raise
 
-                return RunnableLambda(_invoke_fn)
+                async def _ainvoke_fn(input_val, config=None, **kwargs):
+                    if rank > 0:
+                        failed_model = candidate_models[rank - 1]
+                        logger.warning(
+                            f"[LoadBalancer] [Role: {self.display_role}] Fallback triggered! "
+                            f"Model '{failed_model}' failed while performing {self.display_role} -> "
+                            f"Routing to fallback candidate #{rank} '{m_name}'"
+                        )
+                    with ModelHealthTracker.track_execution(m_name):
+                        try:
+                            if hasattr(base, "ainvoke"):
+                                return await base.ainvoke(
+                                    input_val, config=config, **kwargs
+                                )
+                            return base.invoke(input_val, config=config, **kwargs)
+                        except Exception as exc:
+                            ModelHealthTracker.mark_degraded(m_name)
+                            if rank + 1 < len(candidate_models):
+                                next_candidate = candidate_models[rank + 1]
+                                logger.error(
+                                    f"[LoadBalancer] [Role: {self.display_role}] Model '{m_name}' failed while performing {self.display_role} | "
+                                    f"error={exc} | Routing to next candidate #{rank + 1} '{next_candidate}'"
+                                )
+                            else:
+                                logger.error(
+                                    f"[LoadBalancer] [Role: {self.display_role}] Model '{m_name}' failed while performing {self.display_role} | "
+                                    f"error={exc} | All {len(candidate_models)} candidates in pool exhausted!"
+                                )
+                            raise
+
+                return RunnableLambda(_invoke_fn, afunc=_ainvoke_fn)
 
             runnables.append(_create_logged_runnable(model_name, i, base_runnable))
 
@@ -214,6 +271,12 @@ class OpenRouterLoadBalancer:
 
     def invoke(self, input_val: Any, config: Any = None, **kwargs) -> Any:
         runnable = self.get_runnable()
+        return runnable.invoke(input_val, config=config, **kwargs)
+
+    async def ainvoke(self, input_val: Any, config: Any = None, **kwargs) -> Any:
+        runnable = self.get_runnable()
+        if hasattr(runnable, "ainvoke"):
+            return await runnable.ainvoke(input_val, config=config, **kwargs)
         return runnable.invoke(input_val, config=config, **kwargs)
 
     def stream(self, input_val: Any, config: Any = None, **kwargs) -> Any:

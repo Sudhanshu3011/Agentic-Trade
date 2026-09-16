@@ -1,6 +1,46 @@
 import React, { useRef } from "react";
+import { Loader2 } from "lucide-react";
 
 import { FormattedText } from "@/components/ui/FormattedText";
+
+function AnalysisTextSection({
+  content,
+  isPending,
+  fallback = "No analysis available.",
+}: {
+  content?: string | null;
+  isPending?: boolean;
+  fallback?: string;
+}) {
+  if (content && content.trim()) {
+    return (
+      <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
+        <span className="font-semibold text-zinc-900">Analysis: </span>
+        <FormattedText text={content} />
+      </div>
+    );
+  }
+
+  if (isPending) {
+    return (
+      <div className="p-4 bg-gradient-to-r from-zinc-50/90 via-amber-500/[0.02] to-zinc-50/90 border border-zinc-200/75 rounded-xl text-[13px] text-zinc-600 leading-relaxed shadow-sm space-y-2.5 animate-pulse">
+        <div className="flex items-center gap-2 text-zinc-800 font-medium text-xs">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+          <span>Specialist compiling qualitative market insights...</span>
+        </div>
+        <div className="h-2.5 w-full bg-gradient-to-r from-zinc-200/70 via-zinc-100 to-zinc-200/70 rounded-md" />
+        <div className="h-2.5 w-4/5 bg-gradient-to-r from-zinc-200/60 via-zinc-100 to-zinc-200/60 rounded-md" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-500 italic leading-relaxed shadow-sm">
+      <span className="font-semibold text-zinc-700 not-italic">Analysis: </span>
+      {fallback}
+    </div>
+  );
+}
 
 const MetricTable = React.memo(function MetricTable({
   rows,
@@ -38,6 +78,7 @@ export function MarketReportView({
   marketData,
   accent,
   filenameBase,
+  isPending,
   children,
 }: {
   title: string;
@@ -47,6 +88,7 @@ export function MarketReportView({
   marketData: any; // market_data JSON object
   accent?: string;
   filenameBase: string;
+  isPending?: boolean;
   children?: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -94,10 +136,10 @@ export function MarketReportView({
         
         <section>
           <h3 className="text-md font-semibold text-zinc-800 mb-2 border-b pb-1">1. MARKET REGIME</h3>
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.regime || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.regime}
+            isPending={isPending}
+          />
         </section>
 
         <section>
@@ -108,10 +150,10 @@ export function MarketReportView({
             { label: "NASDAQ 10D Momentum", value: getMetric("IXIC", "10d_pct_change") },
             { label: "NASDAQ Quarterly", value: getMetric("IXIC", "quarterly_pct_change") }
           ]} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.us_indices || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.us_indices}
+            isPending={isPending}
+          />
         </section>
 
         <section>
@@ -122,18 +164,18 @@ export function MarketReportView({
             { label: "SENSEX 10D Momentum", value: getMetric("BSESN", "10d_pct_change") },
             { label: "SENSEX Quarterly", value: getMetric("BSESN", "quarterly_pct_change") }
           ]} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.indian_indices || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.indian_indices}
+            isPending={isPending}
+          />
         </section>
 
         <section>
           <h3 className="text-md font-semibold text-zinc-800 mb-2 border-b pb-1">4. GLOBAL-DOMESTIC CORRELATION</h3>
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.correlation || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.correlation}
+            isPending={isPending}
+          />
         </section>
 
         <section>
@@ -142,18 +184,18 @@ export function MarketReportView({
             { label: "VIX 10D Momentum", value: getMetric("VIX", "10d_pct_change") },
             { label: "VIX Quarterly", value: getMetric("VIX", "quarterly_pct_change") }
           ]} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.volatility || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.volatility}
+            isPending={isPending}
+          />
         </section>
 
         <section>
           <h3 className="text-md font-semibold text-zinc-800 mb-2 border-b pb-1">6. MARKET OUTLOOK</h3>
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.outlook || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.outlook}
+            isPending={isPending}
+          />
         </section>
 
         </div>

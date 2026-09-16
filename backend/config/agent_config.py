@@ -4,17 +4,17 @@ import os
 # Agent Model Priority Pools (1 Primary + 2 Fallbacks)
 # ---------------------------------------------------------
 
-# 1. Parallel Analysts (5 concurrent agents with 5 unique primary models)
+# 1. Parallel Analysts (5 concurrent agents with 5 unique primary models + balanced tiered fallbacks)
 FUNDAMENTAL_ANALYST_MODELS = [
     "inclusionai/ling-3.0-flash-fin:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
     "nex-agi/nex-n2.5-pro:free",
 ]
 
 MARKET_ANALYST_MODELS = [
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "nex-agi/nex-n2.5-pro:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "inclusionai/ling-3.0-flash-vl:free",
+    "nex-agi/nex-n2.5-mini:free",
+    "thinking-machines/inkling-small:free",
 ]
 
 NEWS_ANALYST_MODELS = [
@@ -25,33 +25,33 @@ NEWS_ANALYST_MODELS = [
 
 TECHNICAL_ANALYST_MODELS = [
     "nvidia/nemotron-3.5-lightning:free",
-    "nex-agi/nex-n2.5-pro:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
+    "dots-studio/dots-3-note-preview:free",
 ]
 
 SECTOR_ANALYST_MODELS = [
     "nex-agi/nex-n2.5-pro:free",
-    "dots-studio/dots-3-note-preview:free",
+    "inclusionai/ling-3.0-flash-sante:free",
     "thinking-machines/inkling-small:free",
 ]
 
-# 2. Debate and Manager Agents
+# 2. Debate and Manager Agents (Top priority preserved; decoupled strong fallbacks)
 BULL_RESEARCHER_MODELS = [
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "nex-agi/nex-n2.5-pro:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3.5-lightning:free",
 ]
 
 BEAR_RESEARCHER_MODELS = [
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "nex-agi/nex-n2.5-pro:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "inclusionai/ling-3.0-flash-fin:free",
+    "inclusionai/ling-3.0-flash-vl:free",
 ]
 
 RESEARCH_MANAGER_MODELS = [
-    "inclusionai/ling-3.0-flash-fin:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "nex-agi/nex-n2.5-pro:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "nvidia/nemotron-3.5-lightning:free",
 ]
 
 

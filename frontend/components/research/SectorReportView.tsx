@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { Loader2 } from "lucide-react";
 
 import { FormattedText } from "@/components/ui/FormattedText";
 
@@ -51,6 +52,7 @@ export function SectorReportView({
   reportData,
   accent,
   filenameBase,
+  isPending,
   children,
 }: {
   title: string;
@@ -59,6 +61,7 @@ export function SectorReportView({
   reportData: any; // sector_report JSON object
   accent?: string;
   filenameBase: string;
+  isPending?: boolean;
   children?: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -157,17 +160,30 @@ export function SectorReportView({
 
       <div className="rounded-[2rem] bg-white p-5 sm:p-8 shadow-[0_8px_30px_rgba(0,0,0,0.04)] border border-black/[0.04] mb-6 relative overflow-hidden">
         <div className="relative z-10 space-y-8">
-          {Object.entries(reportData || {}).map(
-            ([sectionTitle, sectionContent], index) => (
-              <section
-                key={sectionTitle}
-                className={index > 0 ? "pt-4 border-t border-zinc-100" : ""}
-              >
-                <h3 className="text-md font-semibold text-zinc-800 mb-4 border-b pb-1">
-                  {sectionTitle}
-                </h3>
-                {renderSectionContent(sectionContent)}
-              </section>
+          {(!reportData || Object.keys(reportData).length === 0) && isPending ? (
+            <div className="space-y-4 animate-pulse p-5 rounded-xl border border-zinc-200/75 bg-gradient-to-r from-zinc-50/90 via-amber-500/[0.02] to-zinc-50/90">
+              <div className="flex items-center gap-2 text-zinc-800 font-medium text-xs">
+                <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                <span>Sector specialist compiling industry benchmarks and macroeconomic data...</span>
+              </div>
+              <div className="h-3.5 w-1/3 bg-gradient-to-r from-zinc-200/70 via-zinc-100 to-zinc-200/70 rounded-md" />
+              <div className="h-20 w-full bg-zinc-100/70 border border-zinc-200/50 rounded-xl" />
+              <div className="h-3.5 w-1/4 bg-gradient-to-r from-zinc-200/70 via-zinc-100 to-zinc-200/70 rounded-md" />
+              <div className="h-20 w-full bg-zinc-100/70 border border-zinc-200/50 rounded-xl" />
+            </div>
+          ) : (
+            Object.entries(reportData || {}).map(
+              ([sectionTitle, sectionContent], index) => (
+                <section
+                  key={sectionTitle}
+                  className={index > 0 ? "pt-4 border-t border-zinc-100" : ""}
+                >
+                  <h3 className="text-md font-semibold text-zinc-800 mb-4 border-b pb-1">
+                    {sectionTitle}
+                  </h3>
+                  {renderSectionContent(sectionContent)}
+                </section>
+              )
             )
           )}
         </div>

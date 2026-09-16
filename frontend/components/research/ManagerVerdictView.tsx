@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Scale, AlertCircle, Zap, Target, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Rocket } from "lucide-react";
 import type { Verdict } from "@/lib/api";
 import { ResponsiveContainer, ComposedChart, Area, XAxis, YAxis, Tooltip, ReferenceLine, ReferenceArea } from "recharts";
+import { DebateArenaLoader } from "@/components/research/DebateArenaLoader";
 
 const StockChart = memo(function StockChart({ 
   entry, 
@@ -134,6 +135,7 @@ export function ManagerVerdictView({
   ticker,
   data,
   chartsData,
+  isAnalyzing = false,
   onTriggerDebate,
   debateLoading = false,
   debateError,
@@ -141,10 +143,15 @@ export function ManagerVerdictView({
   ticker: string;
   data?: Verdict | null;
   chartsData?: any;
+  isAnalyzing?: boolean;
   onTriggerDebate?: () => void;
   debateLoading?: boolean;
   debateError?: string | null;
 }) {
+  if (!data && debateLoading) {
+    return <DebateArenaLoader ticker={ticker} />;
+  }
+
   if (!data) {
     return (
       <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-[var(--border)] bg-white p-8 text-center shadow-sm">
@@ -166,13 +173,23 @@ export function ManagerVerdictView({
           {onTriggerDebate && (
             <button
               onClick={onTriggerDebate}
-              disabled={debateLoading}
-              className="mt-2 flex items-center gap-2 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white px-5 py-2.5 text-[13px] font-semibold transition-all shadow-md hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              disabled={debateLoading || isAnalyzing}
+              className={`mt-2 flex items-center gap-2 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white px-5 py-2.5 text-[13px] font-semibold transition-all shadow-md ${
+                isAnalyzing
+                  ? "opacity-40 blur-[0.6px] pointer-events-none cursor-not-allowed select-none"
+                  : "hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              }`}
+              title={isAnalyzing ? "Analysis in progress. Specialist research compiling..." : "Generate Debate & Final Verdict"}
             >
-              {debateLoading ? (
+              {isAnalyzing ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>Synthesizing Final Verdict (~10s)...</span>
+                  <span>Waiting for Specialist Reports...</span>
+                </>
+              ) : debateLoading ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  <span>Synthesizing Executive Verdict...</span>
                 </>
               ) : (
                 <>

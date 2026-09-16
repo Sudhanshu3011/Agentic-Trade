@@ -1,6 +1,46 @@
 import React, { useRef } from "react";
+import { Loader2 } from "lucide-react";
 
 import { FormattedText } from "@/components/ui/FormattedText";
+
+function AnalysisTextSection({
+  content,
+  isPending,
+  fallback = "No analysis available.",
+}: {
+  content?: string | null;
+  isPending?: boolean;
+  fallback?: string;
+}) {
+  if (content && content.trim()) {
+    return (
+      <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
+        <span className="font-semibold text-zinc-900">Analysis: </span>
+        <FormattedText text={content} />
+      </div>
+    );
+  }
+
+  if (isPending) {
+    return (
+      <div className="p-4 bg-gradient-to-r from-zinc-50/90 via-amber-500/[0.02] to-zinc-50/90 border border-zinc-200/75 rounded-xl text-[13px] text-zinc-600 leading-relaxed shadow-sm space-y-2.5 animate-pulse">
+        <div className="flex items-center gap-2 text-zinc-800 font-medium text-xs">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+          <span>Specialist compiling qualitative sentiment & news insights...</span>
+        </div>
+        <div className="h-2.5 w-full bg-gradient-to-r from-zinc-200/70 via-zinc-100 to-zinc-200/70 rounded-md" />
+        <div className="h-2.5 w-4/5 bg-gradient-to-r from-zinc-200/60 via-zinc-100 to-zinc-200/60 rounded-md" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-500 italic leading-relaxed shadow-sm">
+      <span className="font-semibold text-zinc-700 not-italic">Analysis: </span>
+      {fallback}
+    </div>
+  );
+}
 
 const NewsTable = React.memo(function NewsTable({
   articles,
@@ -54,6 +94,7 @@ export function NewsReportView({
   globalNews,
   accent,
   filenameBase,
+  isPending,
   children,
 }: {
   title: string;
@@ -65,6 +106,7 @@ export function NewsReportView({
   globalNews?: any;
   accent?: string;
   filenameBase: string;
+  isPending?: boolean;
   children?: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -107,44 +149,46 @@ export function NewsReportView({
         <section>
           <h3 className="text-md font-semibold text-zinc-800 mb-2 border-b pb-1">1. COMPANY NEWS IMPACT</h3>
           <NewsTable articles={companyNews?.articles || []} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm space-y-2">
-            <div><span className="font-semibold text-zinc-900">Short-Term Impact: </span><FormattedText text={analysis.company_short_term || "No analysis available."} /></div>
-            <div><span className="font-semibold text-zinc-900">Long-Term Impact: </span><FormattedText text={analysis.company_long_term || "No analysis available."} /></div>
+          <div className="space-y-2">
+            <AnalysisTextSection
+              content={analysis.company_short_term ? `**Short-Term Impact:** ${analysis.company_short_term}\n\n**Long-Term Impact:** ${analysis.company_long_term || "N/A"}` : null}
+              isPending={isPending}
+            />
           </div>
         </section>
 
         <section>
           <h3 className="text-md font-semibold text-zinc-800 mb-2 border-b pb-1">2. INDIAN MARKET IMPACT</h3>
           <NewsTable articles={indianNews?.articles || []} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.indian_impact || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.indian_impact}
+            isPending={isPending}
+          />
         </section>
 
         <section>
           <h3 className="text-md font-semibold text-zinc-800 mb-2 border-b pb-1">3. GLOBAL MACRO IMPACT</h3>
           <NewsTable articles={globalNews?.articles || []} />
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.macro_impact || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.macro_impact}
+            isPending={isPending}
+          />
         </section>
 
         <section>
           <h3 className="text-md font-semibold text-zinc-800 mb-2 border-b pb-1">4. CROSS-MARKET INTERACTION</h3>
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm">
-            <span className="font-semibold text-zinc-900">Analysis: </span>
-            <FormattedText text={analysis.cross_market || "No analysis available."} />
-          </div>
+          <AnalysisTextSection
+            content={analysis.cross_market}
+            isPending={isPending}
+          />
         </section>
 
         <section>
           <h3 className="text-md font-semibold text-zinc-800 mb-2 border-b pb-1">5. KEY RISKS & OPPORTUNITIES</h3>
-          <div className="p-4 bg-zinc-50/50 border border-zinc-200 rounded-lg text-[14px] text-zinc-700 leading-relaxed shadow-sm space-y-2">
-            <div><span className="font-semibold text-zinc-900">Risks: </span><FormattedText text={analysis.risks || "No analysis available."} /></div>
-            <div><span className="font-semibold text-zinc-900">Opportunities: </span><FormattedText text={analysis.opportunities || "No analysis available."} /></div>
-          </div>
+          <AnalysisTextSection
+            content={analysis.risks || analysis.opportunities ? `**Risks:** ${analysis.risks || "N/A"}\n\n**Opportunities:** ${analysis.opportunities || "N/A"}` : null}
+            isPending={isPending}
+          />
         </section>
 
         </div>

@@ -3,20 +3,27 @@
 import { motion } from "framer-motion";
 import { TrendingUp, AlertCircle, CheckCircle2, Zap } from "lucide-react";
 import type { ThesisOutput } from "@/lib/api";
+import { DebateArenaLoader } from "@/components/research/DebateArenaLoader";
 
 export function BullThesisView({
   ticker,
   data,
+  isAnalyzing = false,
   onTriggerDebate,
   debateLoading = false,
   debateError,
 }: {
   ticker: string;
   data?: ThesisOutput | null;
+  isAnalyzing?: boolean;
   onTriggerDebate?: () => void;
   debateLoading?: boolean;
   debateError?: string | null;
 }) {
+  if (!data && debateLoading) {
+    return <DebateArenaLoader ticker={ticker} />;
+  }
+
   if (!data) {
     return (
       <div className="flex min-h-[400px] items-center justify-center rounded-2xl border border-[var(--border)] bg-white p-8 text-center shadow-sm">
@@ -38,13 +45,23 @@ export function BullThesisView({
           {onTriggerDebate && (
             <button
               onClick={onTriggerDebate}
-              disabled={debateLoading}
-              className="mt-2 flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-[13px] font-semibold transition-all shadow-md hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              disabled={debateLoading || isAnalyzing}
+              className={`mt-2 flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-[13px] font-semibold transition-all shadow-md ${
+                isAnalyzing
+                  ? "opacity-40 blur-[0.6px] pointer-events-none cursor-not-allowed select-none"
+                  : "hover:scale-105 active:scale-95 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              }`}
+              title={isAnalyzing ? "Analysis in progress. Specialist research compiling..." : "Generate Bull vs. Bear Debate"}
             >
-              {debateLoading ? (
+              {isAnalyzing ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>Synthesizing Bull Thesis (~10s)...</span>
+                  <span>Waiting for Specialist Reports...</span>
+                </>
+              ) : debateLoading ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  <span>Synthesizing Institutional Bull Thesis...</span>
                 </>
               ) : (
                 <>
