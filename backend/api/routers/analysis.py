@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Optional
+from typing import Optional, Any
 from fastapi import APIRouter, Depends, Request, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
@@ -31,6 +31,68 @@ from api.utils import (
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["Analysis"])
+
+
+def validate_analysis_for_cache(data: Any) -> tuple[bool, list[str]]:
+    """
+    Validate that an analysis dictionary or AnalyzeResponse model has all required
+    specialist reports and valid market data before caching in Redis or serving from cache.
+    Prevents cache poisoning from failed, partial, or malformed analysis runs.
+    """
+    errors: list[str] = []
+    if not data:
+        return False, ["Analysis data is empty or None"]
+
+    if isinstance(data, dict):
+        status = data.get("status")
+        company_info = data.get("company_info")
+        historical_prices = data.get("historical_prices")
+        technical_report = data.get("technical_report")
+        fundamental_report = data.get("fundamental_report")
+        market_report = data.get("market_report")
+        news_report = data.get("news_report")
+        sector_report = data.get("sector_report")
+    else:
+        status = getattr(data, "status", None)
+        company_info = getattr(data, "company_info", None)
+        historical_prices = getattr(data, "historical_prices", None)
+        technical_report = getattr(data, "technical_report", None)
+        fundamental_report = getattr(data, "fundamental_report", None)
+        market_report = getattr(data, "market_report", None)
+        news_report = getattr(data, "news_report", None)
+        sector_report = getattr(data, "sector_report", None)
+
+    if status not in ("success", None):
+        errors.append(f"Analysis status is '{status}'")
+
+    if not company_info or not isinstance(company_info, dict):
+        errors.append("company_info is missing or not a dictionary")
+
+    if (
+        not historical_prices
+        or not isinstance(historical_prices, list)
+        or len(historical_prices) == 0
+    ):
+        errors.append("historical_prices is missing or empty")
+
+    reports = {
+        "technical_report": technical_report,
+        "fundamental_report": fundamental_report,
+        "market_report": market_report,
+        "news_report": news_report,
+        "sector_report": sector_report,
+    }
+    for name, r in reports.items():
+        if not r:
+            errors.append(f"{name} is missing or empty")
+        elif isinstance(r, dict) and r.get("status") in ("error", "failed"):
+            errors.append(f"{name} status is '{r.get('status')}'")
+        elif isinstance(r, str) and (
+            r.strip().lower().startswith("error") or "failed" in r.strip().lower()[:30]
+        ):
+            errors.append(f"{name} indicates failure string: {r[:50]}")
+
+    return len(errors) == 0, errors
 
 
 @router.get("/tickers", response_model=list[TickerItem])
@@ -105,30 +167,41 @@ async def analyze(
             # 1. Check Redis Cache
             cached_report = await cache_service.get_json(cache_key)
             if cached_report:
-                logger.info(f"Analysis cache HIT (streaming) | ticker={ticker}")
-                yield json.dumps(
-                    {
-                        "type": "stock_data",
-                        "payload": {
-                            "ticker": ticker,
-                            "company_info": cached_report.get("company_info"),
-                            "historical_prices": cached_report.get("historical_prices"),
-                            "charts_data": cached_report.get("charts_data"),
-                            "technical_data": cached_report.get("technical_data"),
-                            "fundamental_data": cached_report.get("fundamental_data"),
-                            "market_data": cached_report.get("market_data"),
-                        },
-                    }
-                ) + "\n"
-                yield json.dumps(
-                    {
-                        "type": "complete_analysis",
-                        "payload": cached_report,
-                    }
-                ) + "\n"
-                if user is None:
-                    await analysis_service.increment_ip_search(client_ip)
-                return
+                is_valid, errs = validate_analysis_for_cache(cached_report)
+                if is_valid:
+                    logger.info(f"Analysis cache HIT (streaming) | ticker={ticker}")
+                    yield json.dumps(
+                        {
+                            "type": "stock_data",
+                            "payload": {
+                                "ticker": ticker,
+                                "company_info": cached_report.get("company_info"),
+                                "historical_prices": cached_report.get(
+                                    "historical_prices"
+                                ),
+                                "charts_data": cached_report.get("charts_data"),
+                                "technical_data": cached_report.get("technical_data"),
+                                "fundamental_data": cached_report.get(
+                                    "fundamental_data"
+                                ),
+                                "market_data": cached_report.get("market_data"),
+                            },
+                        }
+                    ) + "\n"
+                    yield json.dumps(
+                        {
+                            "type": "complete_analysis",
+                            "payload": cached_report,
+                        }
+                    ) + "\n"
+                    if user is None:
+                        await analysis_service.increment_ip_search(client_ip)
+                    return
+                else:
+                    logger.warning(
+                        f"Corrupted analysis found in cache | ticker={ticker} | evicting | errors={errs}"
+                    )
+                    await cache_service.delete(cache_key)
 
             # 2. Check Concurrent Lock
             lock_acquired = await cache_service.acquire_lock(lock_key, ttl_seconds=600)
@@ -254,10 +327,19 @@ async def analyze(
                     status="success",
                 )
 
-                # Cache in Redis for 20 minutes (1200s)
-                await cache_service.set_json(
-                    cache_key, response.model_dump(), ttl_seconds=1200
-                )
+                # Cache in Redis for 20 minutes (1200s) only if complete and valid
+                is_valid, cache_errors = validate_analysis_for_cache(response)
+                if is_valid:
+                    await cache_service.set_json(
+                        cache_key, response.model_dump(), ttl_seconds=1200
+                    )
+                    logger.info(
+                        f"Analysis successfully cached in Redis | ticker={ticker}"
+                    )
+                else:
+                    logger.warning(
+                        f"Analysis validation failed for cache | ticker={ticker} | SKIPPING REDIS CACHE | errors={cache_errors}"
+                    )
 
                 yield json.dumps(
                     {
@@ -288,10 +370,17 @@ async def analyze(
     # 1. Check Redis Cache
     cached_report = await cache_service.get_json(cache_key)
     if cached_report:
-        logger.info(f"Analysis cache HIT | ticker={ticker}")
-        if user is None:
-            await analysis_service.increment_ip_search(client_ip)
-        return AnalyzeResponse(**cached_report)
+        is_valid, errs = validate_analysis_for_cache(cached_report)
+        if is_valid:
+            logger.info(f"Analysis cache HIT | ticker={ticker}")
+            if user is None:
+                await analysis_service.increment_ip_search(client_ip)
+            return AnalyzeResponse(**cached_report)
+        else:
+            logger.warning(
+                f"Corrupted analysis found in cache | ticker={ticker} | evicting | errors={errs}"
+            )
+            await cache_service.delete(cache_key)
 
     # 2. Check Concurrent Lock if another request is running the same analysis
     lock_acquired = await cache_service.acquire_lock(lock_key, ttl_seconds=600)
@@ -303,10 +392,14 @@ async def analyze(
             await asyncio.sleep(120)
             cached_report = await cache_service.get_json(cache_key)
             if cached_report:
-                logger.info(f"Analysis cache HIT via polling lock | ticker={ticker}")
-                if user is None:
-                    await analysis_service.increment_ip_search(client_ip)
-                return AnalyzeResponse(**cached_report)
+                is_valid, _ = validate_analysis_for_cache(cached_report)
+                if is_valid:
+                    logger.info(
+                        f"Analysis cache HIT via polling lock | ticker={ticker}"
+                    )
+                    if user is None:
+                        await analysis_service.increment_ip_search(client_ip)
+                    return AnalyzeResponse(**cached_report)
 
     try:
         # Pre-warm or fetch deterministic bundle via StockDataService
@@ -365,8 +458,17 @@ async def analyze(
             status="success",
         )
 
-        # Cache response in Redis for 20 minutes (1200s)
-        await cache_service.set_json(cache_key, response.model_dump(), ttl_seconds=1200)
+        # Cache response in Redis for 20 minutes (1200s) only if complete and valid
+        is_valid, cache_errors = validate_analysis_for_cache(response)
+        if is_valid:
+            await cache_service.set_json(
+                cache_key, response.model_dump(), ttl_seconds=1200
+            )
+            logger.info(f"Analysis successfully cached in Redis | ticker={ticker}")
+        else:
+            logger.warning(
+                f"Analysis validation failed for cache | ticker={ticker} | SKIPPING REDIS CACHE | errors={cache_errors}"
+            )
 
         return response
 

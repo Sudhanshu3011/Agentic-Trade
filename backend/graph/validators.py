@@ -46,23 +46,33 @@ def validate_sector_summary(summary: Any) -> Tuple[bool, str]:
     """Validate sector analyst summary structure."""
     if not summary or not isinstance(summary, dict):
         return False, "Sector summary is missing or not a dictionary"
-    
+
     _normalize_sentiment(summary)
-    required_keys = ["sentiment", "key_driver", "primary_risk", "bull_signals", "bear_signals"]
+    required_keys = [
+        "sentiment",
+        "key_driver",
+        "primary_risk",
+        "bull_signals",
+        "bear_signals",
+    ]
     missing = [k for k in required_keys if k not in summary or summary[k] is None]
     if missing:
         return False, f"Sector summary missing required fields: {', '.join(missing)}"
-    
-    if not isinstance(summary.get("bull_signals"), list) or not isinstance(summary.get("bear_signals"), list):
+
+    if not isinstance(summary.get("bull_signals"), list) or not isinstance(
+        summary.get("bear_signals"), list
+    ):
         return False, "Sector summary bull_signals and bear_signals must be lists"
-        
+
     return True, ""
 
 
-def validate_analyst_schemas(state: dict, require_full_reports: bool = False) -> Tuple[bool, List[str]]:
+def validate_analyst_schemas(
+    state: dict, require_full_reports: bool = False
+) -> Tuple[bool, List[str]]:
     """
     Validate that all 5 specialist analysts produced valid structured outputs matching their schemas.
-    
+
     Gate 1: Must pass before proceeding to Bull / Bear debate.
     Checks:
     1. Market Analyst (MarketSummary, and optionally MarketAnalysis)
@@ -70,7 +80,7 @@ def validate_analyst_schemas(state: dict, require_full_reports: bool = False) ->
     3. Technical Analyst (TechnicalSummary, and optionally TechnicalAnalysis)
     4. News Analyst (NewsSummary, and optionally NewsAnalysis)
     5. Sector Analyst (Sector summary and report)
-    
+
     Returns:
         (is_valid, list_of_error_reasons)
     """
@@ -85,7 +95,9 @@ def validate_analyst_schemas(state: dict, require_full_reports: bool = False) ->
         try:
             MarketSummary.model_validate(m_summary)
         except ValidationError as e:
-            errors.append(f"Market analyst summary schema violation: {e.errors()[0]['msg']}")
+            errors.append(
+                f"Market analyst summary schema violation: {e.errors()[0]['msg']}"
+            )
 
     if require_full_reports or (m_report and isinstance(m_report, dict)):
         if isinstance(m_report, str) or not m_report:
@@ -94,7 +106,9 @@ def validate_analyst_schemas(state: dict, require_full_reports: bool = False) ->
             try:
                 MarketAnalysis.model_validate(m_report)
             except ValidationError as e:
-                errors.append(f"Market analyst report schema violation: {e.errors()[0]['msg']}")
+                errors.append(
+                    f"Market analyst report schema violation: {e.errors()[0]['msg']}"
+                )
 
     # 2. Fundamental Analyst
     f_summary = _normalize_sentiment(state.get("fundamental_analyst_summary"))
@@ -105,16 +119,22 @@ def validate_analyst_schemas(state: dict, require_full_reports: bool = False) ->
         try:
             FundamentalSummary.model_validate(f_summary)
         except ValidationError as e:
-            errors.append(f"Fundamental analyst summary schema violation: {e.errors()[0]['msg']}")
+            errors.append(
+                f"Fundamental analyst summary schema violation: {e.errors()[0]['msg']}"
+            )
 
     if require_full_reports or (f_report and isinstance(f_report, dict)):
         if isinstance(f_report, str) or not f_report:
-            errors.append("Fundamental analyst report is missing or contains error message.")
+            errors.append(
+                "Fundamental analyst report is missing or contains error message."
+            )
         elif isinstance(f_report, dict):
             try:
                 FundamentalAnalysis.model_validate(f_report)
             except ValidationError as e:
-                errors.append(f"Fundamental analyst report schema violation: {e.errors()[0]['msg']}")
+                errors.append(
+                    f"Fundamental analyst report schema violation: {e.errors()[0]['msg']}"
+                )
 
     # 3. Technical Analyst
     t_summary = _normalize_sentiment(state.get("technical_analyst_summary"))
@@ -125,16 +145,22 @@ def validate_analyst_schemas(state: dict, require_full_reports: bool = False) ->
         try:
             TechnicalSummary.model_validate(t_summary)
         except ValidationError as e:
-            errors.append(f"Technical analyst summary schema violation: {e.errors()[0]['msg']}")
+            errors.append(
+                f"Technical analyst summary schema violation: {e.errors()[0]['msg']}"
+            )
 
     if require_full_reports or (t_report and isinstance(t_report, dict)):
         if isinstance(t_report, str) or not t_report:
-            errors.append("Technical analyst report is missing or contains error message.")
+            errors.append(
+                "Technical analyst report is missing or contains error message."
+            )
         elif isinstance(t_report, dict):
             try:
                 TechnicalAnalysis.model_validate(t_report)
             except ValidationError as e:
-                errors.append(f"Technical analyst report schema violation: {e.errors()[0]['msg']}")
+                errors.append(
+                    f"Technical analyst report schema violation: {e.errors()[0]['msg']}"
+                )
 
     # 4. News Analyst
     n_summary = _normalize_sentiment(state.get("news_analyst_summary"))
@@ -145,7 +171,9 @@ def validate_analyst_schemas(state: dict, require_full_reports: bool = False) ->
         try:
             NewsSummary.model_validate(n_summary)
         except ValidationError as e:
-            errors.append(f"News analyst summary schema violation: {e.errors()[0]['msg']}")
+            errors.append(
+                f"News analyst summary schema violation: {e.errors()[0]['msg']}"
+            )
 
     if require_full_reports or (n_report and isinstance(n_report, dict)):
         if isinstance(n_report, str) or not n_report:
@@ -154,7 +182,9 @@ def validate_analyst_schemas(state: dict, require_full_reports: bool = False) ->
             try:
                 NewsAnalysis.model_validate(n_report)
             except ValidationError as e:
-                errors.append(f"News analyst report schema violation: {e.errors()[0]['msg']}")
+                errors.append(
+                    f"News analyst report schema violation: {e.errors()[0]['msg']}"
+                )
 
     # 5. Sector Analyst
     s_summary = state.get("sector_analyst_summary")
@@ -172,7 +202,7 @@ def validate_analyst_schemas(state: dict, require_full_reports: bool = False) ->
 def validate_thesis_output(thesis_data: Any, role: str = "Debate") -> Tuple[bool, str]:
     """
     Validate that Bull or Bear researcher produced a valid ThesisOutput matching the JSON schema.
-    
+
     Gate 2: Must pass for BOTH Bull and Bear before Research Manager verdict can run.
     Checks:
     1. Not None or empty.
@@ -180,7 +210,7 @@ def validate_thesis_output(thesis_data: Any, role: str = "Debate") -> Tuple[bool
     3. Status != 'failure'.
     4. Title != 'Parsing Error'.
     5. Arguments list is non-empty and contains valid arguments with details.
-    
+
     Returns:
         (is_valid, error_reason)
     """
@@ -196,12 +226,19 @@ def validate_thesis_output(thesis_data: Any, role: str = "Debate") -> Tuple[bool
         except ValidationError as e:
             return False, f"{role} thesis schema violation: {e.errors()[0]['msg']}"
     else:
-        return False, f"{role} thesis must be a dict or ThesisOutput instance, got {type(thesis_data).__name__}"
+        return (
+            False,
+            f"{role} thesis must be a dict or ThesisOutput instance, got {type(thesis_data).__name__}",
+        )
 
     if obj.status == "failure":
         return False, f"{role} thesis has failure status."
 
-    if obj.title.strip().lower() in ["parsing error", "error", "debate failed due to internal reasons"]:
+    if obj.title.strip().lower() in [
+        "parsing error",
+        "error",
+        "debate failed due to internal reasons",
+    ]:
         return False, f"{role} thesis title indicates parsing error: '{obj.title}'"
 
     if not obj.arguments or len(obj.arguments) == 0:

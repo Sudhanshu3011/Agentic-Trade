@@ -234,10 +234,23 @@ async def run_debate_route(
             status="success" if verdict else "partial",
         )
 
-        # Cache debate in Redis for 20 minutes (1200s)
-        await cache_service.set_json(
-            f"debate:{ticker}", response.model_dump(), ttl_seconds=1200
-        )
+        # Cache debate in Redis for 20 minutes (1200s) only if complete and successful
+        if (
+            response.status == "success"
+            and verdict
+            and isinstance(verdict, dict)
+            and verdict.get("decision") in ("BUY", "SELL", "HOLD")
+            and valid_bull
+            and valid_bear
+        ):
+            await cache_service.set_json(
+                f"debate:{ticker}", response.model_dump(), ttl_seconds=1200
+            )
+            logger.info(f"Complete debate cached in Redis | ticker={ticker}")
+        else:
+            logger.warning(
+                f"Debate incomplete or failed | ticker={ticker} | SKIPPING REDIS CACHE | status={response.status}"
+            )
 
         return response
 

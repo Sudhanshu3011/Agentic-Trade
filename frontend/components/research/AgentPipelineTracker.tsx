@@ -7,153 +7,73 @@ import {
   Globe2,
   Newspaper,
   Layers,
-  Sparkles,
+  Loader2,
 } from "lucide-react";
 
-interface AgentStatus {
-  name: string;
-  role: string;
-  description: string;
-  icon: typeof Activity;
-  color: string;
-  bg: string;
-  border: string;
-}
-
-const AGENTS: AgentStatus[] = [
-  {
-    name: "Technical Analyst",
-    role: "Quantitative Indicators",
-    description: "Evaluating trend momentum, support/resistance & RSI volatility regimes...",
-    icon: Activity,
-    color: "text-indigo-600",
-    bg: "bg-indigo-50/35",
-    border: "border-indigo-200/60",
-  },
-  {
-    name: "Fundamental Analyst",
-    role: "Financial Statements",
-    description: "Auditing balance sheet leverage, ROCE, and free cash-flow inflections...",
-    icon: Landmark,
-    color: "text-emerald-600",
-    bg: "bg-emerald-50/35",
-    border: "border-emerald-200/60",
-  },
-  {
-    name: "Global Market Analyst",
-    role: "Macro Regimes",
-    description: "Correlating Nifty 50, Sensex, VIX, and global indices...",
-    icon: Globe2,
-    color: "text-blue-600",
-    bg: "bg-blue-50/35",
-    border: "border-blue-200/60",
-  },
-  {
-    name: "News & Sentiment Analyst",
-    role: "Disclosures & Signals",
-    description: "Extracting corporate actions, regulatory filings, and market catalysts...",
-    icon: Newspaper,
-    color: "text-amber-600",
-    bg: "bg-amber-50/35",
-    border: "border-amber-200/60",
-  },
-  {
-    name: "Sector Specialist",
-    role: "Peer Benchmarking",
-    description: "Benchmarking relative valuation multiples & industry tailwinds...",
-    icon: Layers,
-    color: "text-purple-600",
-    bg: "bg-purple-50/35",
-    border: "border-purple-200/60",
-  },
+const SPECIALISTS = [
+  { name: "Technical", focus: "Price & Trend", icon: Activity },
+  { name: "Fundamental", focus: "Financial Health", icon: Landmark },
+  { name: "Global Market", focus: "Macro & Indices", icon: Globe2 },
+  { name: "News & Sentiment", focus: "Corporate Disclosures", icon: Newspaper },
+  { name: "Sector", focus: "Peer Benchmarks", icon: Layers },
 ];
 
 export function AgentPipelineTracker() {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ duration: 0.4 }}
-      className="mt-6 rounded-2xl border border-zinc-200/80 bg-white/95 p-5 sm:p-6 shadow-sm backdrop-blur-sm"
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.3 }}
+      className="mx-auto max-w-[920px] rounded-xl sm:rounded-2xl border border-zinc-200 bg-white p-3.5 sm:p-5 shadow-xs"
     >
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-zinc-100">
+      <div className="flex items-center justify-between gap-3 pb-3 border-b border-zinc-100">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 border border-amber-500/20">
-            <Sparkles className="h-4 w-4 animate-pulse" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-100 text-zinc-700 shrink-0">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-600" />
           </div>
           <div>
-            <h3 className="font-sans text-[15px] font-semibold text-zinc-900 tracking-tight">
-              Institutional Research Squad in Session
+            <h3 className="font-sans text-[13px] sm:text-[14px] font-bold text-zinc-900 tracking-tight">
+              Synthesizing Specialist Research
             </h3>
-            <p className="text-[13px] text-zinc-500">
-              5 specialist agents are synthesizing in-depth reports in parallel. Full reports unlock below momentarily.
+            <p className="text-[11px] sm:text-[12px] text-zinc-500">
+              Quantitative data loaded. Compiling qualitative analyst reports.
             </p>
           </div>
         </div>
 
-        {/* Live Pulse Badge */}
-        <div className="flex items-center gap-2 self-start sm:self-center px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-amber-800 font-mono text-[11px] font-medium">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-          </span>
-          <span>5 Agents Active</span>
-        </div>
+        {/* Live Badge */}
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-800 font-mono text-[10px] sm:text-[11px] font-medium shrink-0">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+          <span>5 Analysts Active</span>
+        </span>
       </div>
 
-      {/* Progress Timeline Indicator */}
-      <div className="relative my-4 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">
-        <motion.div
-          className="h-full rounded-full bg-gradient-to-r from-amber-500 via-indigo-600 to-amber-500"
-          initial={{ width: "15%" }}
-          animate={{ width: ["20%", "65%", "85%"] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-      </div>
-
-      {/* 5 Agent Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-2">
-        {AGENTS.map((agent, i) => {
-          const Icon = agent.icon;
+      {/* Specialist Status Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 pt-2.5">
+        {SPECIALISTS.map((s) => {
+          const Icon = s.icon;
           return (
-            <motion.div
-              key={agent.name}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: i * 0.08 }}
-              className={`flex flex-col justify-between rounded-xl border ${agent.border} ${agent.bg} p-3.5 transition-all hover:shadow-sm`}
+            <div
+              key={s.name}
+              className="flex items-center gap-2 rounded-lg border border-zinc-100 bg-zinc-50/70 px-2.5 py-1.5 sm:py-2 text-left"
             >
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <Icon className={`h-4 w-4 ${agent.color}`} />
-                    <span className="font-sans text-[13px] font-semibold text-zinc-900 line-clamp-1">
-                      {agent.name}
-                    </span>
-                  </div>
-                </div>
-                <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-400 mb-1.5">
-                  {agent.role}
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-white border border-zinc-200/80 text-zinc-700 shrink-0">
+                <Icon className="h-3 w-3" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-sans text-[11px] sm:text-[12px] font-semibold text-zinc-900 truncate">
+                  {s.name}
                 </p>
-                <p className="text-[12px] leading-relaxed text-zinc-600 line-clamp-3">
-                  {agent.description}
+                <p className="font-mono text-[9px] text-zinc-400 truncate">
+                  {s.focus}
                 </p>
               </div>
-
-              {/* Status pill */}
-              <div className="mt-3 flex items-center gap-1.5 pt-2 border-t border-black/[0.04]">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                <span className="font-mono text-[10px] text-zinc-500">
-                  Synthesizing...
-                </span>
-              </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>
     </motion.div>
   );
 }
-

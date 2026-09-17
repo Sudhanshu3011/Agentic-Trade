@@ -708,6 +708,24 @@ export async function saveAnalysis({
   data: AnalyseResponse;
   authToken: string;
 }): Promise<SaveAnalysisResponse> {
+  // Client-side pre-validation: verify all 5 specialist reports and company info exist
+  if (
+    !data ||
+    !data.ticker ||
+    !data.company_info ||
+    !data.technical_report ||
+    !data.fundamental_report ||
+    !data.market_report ||
+    !data.news_report ||
+    !data.sector_report
+  ) {
+    throw new AnalysisError({
+      title: "SAVE FAILED",
+      message:
+        "Cannot save incomplete analysis. Please ensure all 5 specialist analyst reports are generated before saving.",
+    });
+  }
+
   const url = `${API_BASE_URL}/analyses/save`;
   const res = await fetchWithAuth(url, {
     method: "POST",
@@ -1270,8 +1288,30 @@ export async function verifyOpenRouterApiKey({
 
 const KEY = (t: string) => `arbor:research:${t.toUpperCase()}`;
 
+export function isAnalysisComplete(data: any): boolean {
+  if (!data || typeof data !== "object") return false;
+  if (data.status && data.status !== "success") return false;
+  if (!data.company_info || typeof data.company_info !== "object") return false;
+  if (!Array.isArray(data.historical_prices) || data.historical_prices.length === 0) return false;
+  if (!data.charts_data || typeof data.charts_data !== "object") return false;
+  if (
+    !data.technical_report ||
+    !data.fundamental_report ||
+    !data.market_report ||
+    !data.news_report ||
+    !data.sector_report
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export function cacheResponse(ticker: string, data: AnalyseResponse) {
   try {
+    if (!isAnalysisComplete(data)) {
+      console.warn(`[cacheResponse] Skipping cache for incomplete analysis | ticker=${ticker}`);
+      return;
+    }
     const clean = normalizeTicker(ticker);
     sessionStorage.setItem(KEY(clean), JSON.stringify(data));
   } catch { }
@@ -1289,7 +1329,7 @@ export function readCached(ticker: string): AnalyseResponse | null {
     const raw = sessionStorage.getItem(KEY(clean));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AnalyseResponse;
-    if (!parsed.charts_data) {
+    if (!isAnalysisComplete(parsed)) {
       sessionStorage.removeItem(KEY(clean));
       return null;
     }
