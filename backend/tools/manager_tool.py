@@ -4,6 +4,35 @@ from core.logging import get_logger
 logger = get_logger(__name__)
 
 
+FACTOR_DISPLAY_NAMES = {
+    "50D_SWING_LOW": "50D Swing Low",
+    "50D_SWING_HIGH": "50D Swing High",
+    "20D_SWING_LOW": "20D Swing Low",
+    "20D_SWING_HIGH": "20D Swing High",
+    "FIB_23_6": "23.6% Fib",
+    "FIB_38_2": "38.2% Fib",
+    "FIB_50_0": "50.0% Fib",
+    "FIB_61_8": "61.8% Fib",
+    "FIB_78_6": "78.6% Fib",
+    "FIB_EXT_127_2": "127.2% Fib Ext",
+    "FIB_EXT_161_8": "161.8% Fib Ext",
+    "SMA_20": "20-DMA",
+    "SMA_50": "50-DMA",
+    "SMA_200": "200-DMA",
+    "HISTORICAL_BOUNCE": "Price Bounce",
+}
+
+STRENGTH_LABELS = {
+    "HIGH": "Strong",
+    "MEDIUM": "Moderate",
+    "LOW": "Minor",
+}
+
+
+def _format_factors(factors: list[str]) -> str:
+    return ", ".join(FACTOR_DISPLAY_NAMES.get(f, f) for f in factors[:3])
+
+
 def extract_ground_truth_benchmarks(state: dict) -> str:
     """
     Extract a concise, factual anchor of real market price, support/resistance levels,
@@ -42,11 +71,58 @@ def extract_ground_truth_benchmarks(state: dict) -> str:
         r2 = price_levels.get("resistance_2")
         h52 = price_levels.get("high_52w") or info.get("fiftyTwoWeekHigh")
         l52 = price_levels.get("low_52w") or info.get("fiftyTwoWeekLow")
+        m_struct = price_levels.get("market_structure") or "RANGE"
+
+        supports_list = price_levels.get("supports") or []
+        resistances_list = price_levels.get("resistances") or []
+
+        s1_detail = f"{s1}" if s1 is not None else "None"
+        if supports_list and len(supports_list) > 0 and s1 is not None:
+            top_s = supports_list[0]
+            factors_str = _format_factors(top_s.get("confluence_factors", []))
+            zone_obj = top_s.get("zone", {})
+            strength = STRENGTH_LABELS.get(
+                top_s.get("strength", ""), top_s.get("strength", "N/A")
+            )
+            score = top_s.get("confluence_score", "N/A")
+            z_str = (
+                f" [Zone: {curr_symbol}{zone_obj.get('low')}–{curr_symbol}{zone_obj.get('high')}]"
+                if zone_obj
+                else ""
+            )
+            s1_detail = (
+                f"{s1} ({strength} Support, Score {score}: {factors_str}){z_str}"
+            )
+
+        r1_detail = f"{r1}" if r1 is not None else "None"
+        if resistances_list and len(resistances_list) > 0 and r1 is not None:
+            top_r = resistances_list[0]
+            factors_str = _format_factors(top_r.get("confluence_factors", []))
+            zone_obj = top_r.get("zone", {})
+            strength = STRENGTH_LABELS.get(
+                top_r.get("strength", ""), top_r.get("strength", "N/A")
+            )
+            score = top_r.get("confluence_score", "N/A")
+            z_str = (
+                f" [Zone: {curr_symbol}{zone_obj.get('low')}–{curr_symbol}{zone_obj.get('high')}]"
+                if zone_obj
+                else ""
+            )
+            r1_detail = (
+                f"{r1} ({strength} Resistance, Score {score}: {factors_str}){z_str}"
+            )
+
+        s2_str = f"{s2}" if s2 is not None else "None"
+        r2_str = f"{r2}" if r2 is not None else "None"
+
         lines.append(
-            f"• Technical Price Levels: Support [S1: {s1}, S2: {s2}] | Resistance [R1: {r1}, R2: {r2}]"
+            f"• Technical Price Levels: Support [S1: {s1_detail}, S2: {s2_str}] | Resistance [R1: {r1_detail}, R2: {r2_str}] | Market Structure: {m_struct}"
         )
+
         if h52 or l52:
-            lines.append(f"• 52-Week Range: Low: {l52} | High: {h52}")
+            lines.append(
+                f"• 52-Week Range: Low: {curr_symbol}{l52} | High: {curr_symbol}{h52}"
+            )
 
     # 3. Technical Momentum & Trend Indicators
     tech_indicators = []

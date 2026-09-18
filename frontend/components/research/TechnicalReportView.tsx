@@ -2,6 +2,8 @@ import React, { useRef } from "react";
 import { Loader2 } from "lucide-react";
 
 import { FormattedText } from "@/components/ui/FormattedText";
+import { sanitizeTickerSymbol } from "@/lib/sanitizer";
+import { humanizeFieldName } from "@/lib/humanizer";
 import {
   TechnicalTrendChart,
   TechnicalVolatilityChart,
@@ -59,7 +61,7 @@ const MetricTable = React.memo(function MetricTable({
         <tbody className="divide-y divide-[var(--border)]">
           {rows.map((row, i) => (
             <tr key={i} className="even:bg-slate-50 hover:bg-slate-100 transition-colors">
-              <td className="px-4 py-2 font-medium text-zinc-800 w-1/3">{row.label}</td>
+              <td className="px-4 py-2 font-medium text-zinc-800 w-1/3">{humanizeFieldName(row.label)}</td>
               <td className="px-4 py-2 text-zinc-600">
                 {row.value !== null && row.value !== undefined ? (
                   <FormattedText text={String(row.value)} />
@@ -99,11 +101,6 @@ export function TechnicalReportView({
   children?: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const canDownload = Boolean(reportData);
-
-  const handleDownloadPdf = () => {
-    window.print();
-  };
 
   const analysis = reportData?.analysis || reportData || {};
   const t = technicalData || {};
@@ -125,21 +122,12 @@ export function TechnicalReportView({
           <div className="mb-3 flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 shadow-sm w-fit">
             {accent && <div className="h-2 w-2 rounded-full" style={{ background: accent }} />}
             <span className="font-mono text-[11px] font-medium text-zinc-600 tracking-wider uppercase">
-              {ticker.split(".")[0]} · {status}
+              {sanitizeTickerSymbol(ticker)} · {status}
             </span>
           </div>
           <h2 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             {title}
           </h2>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            disabled={!canDownload}
-            onClick={handleDownloadPdf}
-            className="flex items-center gap-1.5 rounded-md bg-gradient-to-b from-zinc-800 to-zinc-950 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] px-3 py-1.5 font-sans text-[11px] font-medium text-white transition-all hover:scale-105 hover:from-zinc-700 hover:to-zinc-950 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-          >
-            PDF
-          </button>
         </div>
       </div>
 
@@ -233,7 +221,13 @@ export function TechnicalReportView({
             { label: "52-Week High", value: pl.high_52w },
             { label: "52-Week Low", value: pl.low_52w },
             { label: "% From 52W High", value: pl.pct_from_52w_high },
-            { label: "% From 52W Low", value: pl.pct_from_52w_low }
+            { label: "% From 52W Low", value: pl.pct_from_52w_low },
+            ...(pl.support_1?.price ? [{ label: "Primary Support (S1)", value: `₹${pl.support_1.price} (${pl.support_1.strength} strength: ${pl.support_1.confluence_factors?.join(", ") || ""})` }] : []),
+            ...(pl.support_2?.price ? [{ label: "Capitulation Support (S2)", value: `₹${pl.support_2.price} (${pl.support_2.strength} strength: ${pl.support_2.confluence_factors?.join(", ") || ""})` }] : []),
+            ...(pl.resistance_1?.price ? [{ label: "Primary Resistance (R1)", value: `₹${pl.resistance_1.price} (${pl.resistance_1.strength} strength: ${pl.resistance_1.confluence_factors?.join(", ") || ""})` }] : []),
+            ...(pl.resistance_2?.price ? [{ label: "Extended Resistance (R2)", value: `₹${pl.resistance_2.price} (${pl.resistance_2.strength} strength: ${pl.resistance_2.confluence_factors?.join(", ") || ""})` }] : []),
+            ...(pl.market_structure ? [{ label: "Market Structure", value: pl.market_structure }] : []),
+            ...(pl.swing_context?.direction ? [{ label: "Swing Context", value: `${pl.swing_context.direction} (from ₹${pl.swing_context.swing_low} to ₹${pl.swing_context.swing_high})` }] : []),
           ]} />
           <AnalysisTextSection
             content={analysis.price_levels}

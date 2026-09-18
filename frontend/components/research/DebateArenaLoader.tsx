@@ -2,13 +2,14 @@
 
 import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Scale, ShieldAlert, CheckCircle2 } from "lucide-react";
+import { sanitizeTickerSymbol } from "@/lib/sanitizer";
 
 interface DebateArenaLoaderProps {
   ticker: string;
 }
 
 export function DebateArenaLoader({ ticker }: DebateArenaLoaderProps) {
-  const cleanSymbol = (ticker || "STOCK").split(".")[0].toUpperCase();
+  const cleanSymbol = sanitizeTickerSymbol(ticker);
 
   return (
     <div className="mx-auto max-w-[920px] space-y-6">

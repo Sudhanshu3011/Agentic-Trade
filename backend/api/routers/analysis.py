@@ -22,6 +22,7 @@ from services.stock_data_service import StockDataService
 from core.exceptions import SearchLimitReachedError
 from core.logging import get_logger
 from graph.builder import build_graph
+from graph.validators import validate_analyst_schemas
 from api.utils import (
     limiter,
     get_client_ip,
@@ -36,7 +37,9 @@ router = APIRouter(tags=["Analysis"])
 def validate_analysis_for_cache(data: Any) -> tuple[bool, list[str]]:
     """
     Validate that an analysis dictionary or AnalyzeResponse model has all required
-    specialist reports and valid market data before caching in Redis or serving from cache.
+    specialist reports and valid market data, AND strictly validates the Pydantic
+    schemas of BOTH the individual analyst reports (TechnicalAnalysis, FundamentalAnalysis,
+    MarketAnalysis, NewsAnalysis, Sector) and analyst summaries before caching in Redis.
     Prevents cache poisoning from failed, partial, or malformed analysis runs.
     """
     errors: list[str] = []
@@ -47,20 +50,16 @@ def validate_analysis_for_cache(data: Any) -> tuple[bool, list[str]]:
         status = data.get("status")
         company_info = data.get("company_info")
         historical_prices = data.get("historical_prices")
-        technical_report = data.get("technical_report")
-        fundamental_report = data.get("fundamental_report")
-        market_report = data.get("market_report")
-        news_report = data.get("news_report")
-        sector_report = data.get("sector_report")
+        data_dict = data
     else:
         status = getattr(data, "status", None)
         company_info = getattr(data, "company_info", None)
         historical_prices = getattr(data, "historical_prices", None)
-        technical_report = getattr(data, "technical_report", None)
-        fundamental_report = getattr(data, "fundamental_report", None)
-        market_report = getattr(data, "market_report", None)
-        news_report = getattr(data, "news_report", None)
-        sector_report = getattr(data, "sector_report", None)
+        data_dict = (
+            data.model_dump()
+            if hasattr(data, "model_dump")
+            else getattr(data, "__dict__", {})
+        )
 
     if status not in ("success", None):
         errors.append(f"Analysis status is '{status}'")
@@ -75,22 +74,15 @@ def validate_analysis_for_cache(data: Any) -> tuple[bool, list[str]]:
     ):
         errors.append("historical_prices is missing or empty")
 
-    reports = {
-        "technical_report": technical_report,
-        "fundamental_report": fundamental_report,
-        "market_report": market_report,
-        "news_report": news_report,
-        "sector_report": sector_report,
-    }
-    for name, r in reports.items():
-        if not r:
-            errors.append(f"{name} is missing or empty")
-        elif isinstance(r, dict) and r.get("status") in ("error", "failed"):
-            errors.append(f"{name} status is '{r.get('status')}'")
-        elif isinstance(r, str) and (
-            r.strip().lower().startswith("error") or "failed" in r.strip().lower()[:30]
-        ):
-            errors.append(f"{name} indicates failure string: {r[:50]}")
+    # Strictly validate Pydantic schemas for BOTH the individual specialist reports
+    # (MarketAnalysis, FundamentalAnalysis, TechnicalAnalysis, NewsAnalysis, Sector)
+    # AND each individual analyst summary (MarketSummary, FundamentalSummary, etc.).
+    # If any report or summary violates its schema or is incomplete, reject from cache.
+    is_valid_schema, schema_errors = validate_analyst_schemas(
+        data_dict, require_full_reports=True
+    )
+    if not is_valid_schema:
+        errors.extend(schema_errors)
 
     return len(errors) == 0, errors
 

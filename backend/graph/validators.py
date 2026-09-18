@@ -85,10 +85,29 @@ def validate_analyst_schemas(
         (is_valid, list_of_error_reasons)
     """
     errors: List[str] = []
+    summaries = (
+        state.get("analyst_summaries")
+        if isinstance(state.get("analyst_summaries"), dict)
+        else {}
+    )
+
+    def _parse_report(r: Any) -> Any:
+        if isinstance(r, str):
+            try:
+                import json
+
+                return json.loads(r)
+            except Exception:
+                return r
+        return r
 
     # 1. Market Analyst
-    m_summary = _normalize_sentiment(state.get("market_analyst_summary"))
-    m_report = state.get("market_analyst_report")
+    m_summary = _normalize_sentiment(
+        state.get("market_analyst_summary") or summaries.get("market_analyst_summary")
+    )
+    m_report = _parse_report(
+        state.get("market_analyst_report") or state.get("market_report")
+    )
     if not m_summary or isinstance(m_summary, str):
         errors.append("Market analyst summary is missing or invalid string.")
     else:
@@ -111,8 +130,13 @@ def validate_analyst_schemas(
                 )
 
     # 2. Fundamental Analyst
-    f_summary = _normalize_sentiment(state.get("fundamental_analyst_summary"))
-    f_report = state.get("fundamental_analyst_report")
+    f_summary = _normalize_sentiment(
+        state.get("fundamental_analyst_summary")
+        or summaries.get("fundamental_analyst_summary")
+    )
+    f_report = _parse_report(
+        state.get("fundamental_analyst_report") or state.get("fundamental_report")
+    )
     if not f_summary or isinstance(f_summary, str):
         errors.append("Fundamental analyst summary is missing or invalid string.")
     else:
@@ -137,8 +161,13 @@ def validate_analyst_schemas(
                 )
 
     # 3. Technical Analyst
-    t_summary = _normalize_sentiment(state.get("technical_analyst_summary"))
-    t_report = state.get("technical_analyst_report")
+    t_summary = _normalize_sentiment(
+        state.get("technical_analyst_summary")
+        or summaries.get("technical_analyst_summary")
+    )
+    t_report = _parse_report(
+        state.get("technical_analyst_report") or state.get("technical_report")
+    )
     if not t_summary or isinstance(t_summary, str):
         errors.append("Technical analyst summary is missing or invalid string.")
     else:
@@ -163,8 +192,12 @@ def validate_analyst_schemas(
                 )
 
     # 4. News Analyst
-    n_summary = _normalize_sentiment(state.get("news_analyst_summary"))
-    n_report = state.get("news_analyst_report")
+    n_summary = _normalize_sentiment(
+        state.get("news_analyst_summary") or summaries.get("news_analyst_summary")
+    )
+    n_report = _parse_report(
+        state.get("news_analyst_report") or state.get("news_report")
+    )
     if not n_summary or isinstance(n_summary, str):
         errors.append("News analyst summary is missing or invalid string.")
     else:
@@ -187,12 +220,21 @@ def validate_analyst_schemas(
                 )
 
     # 5. Sector Analyst
-    s_summary = state.get("sector_analyst_summary")
-    s_report = state.get("sector_analyst_report")
+    s_summary = state.get("sector_analyst_summary") or summaries.get(
+        "sector_analyst_summary"
+    )
+    s_report = state.get("sector_analyst_report") or state.get("sector_report")
     s_valid, s_err = validate_sector_summary(s_summary)
     if not s_valid:
         errors.append(s_err)
-    if require_full_reports and (not s_report or isinstance(s_report, str)):
+    if require_full_reports and (
+        not s_report
+        or isinstance(s_report, str)
+        and (
+            s_report.strip().lower().startswith("error")
+            or "failed" in s_report.strip().lower()[:30]
+        )
+    ):
         errors.append("Sector analyst report is missing or failed.")
 
     is_valid = len(errors) == 0

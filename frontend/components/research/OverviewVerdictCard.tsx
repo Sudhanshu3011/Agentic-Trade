@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import type { Verdict } from "@/lib/api";
 
+import { sanitizeTickerSymbol, sanitizeDecision, sanitizePriceValue, sanitizeCleanText } from "@/lib/sanitizer";
+
 interface OverviewVerdictCardProps {
   verdict: Verdict;
   ticker: string;
@@ -27,12 +29,12 @@ export const OverviewVerdictCard = memo(function OverviewVerdictCard({
 }: OverviewVerdictCardProps) {
   if (!verdict || !verdict.decision) return null;
 
-  const decision = (verdict.decision || "HOLD").toUpperCase();
+  const decision = sanitizeDecision(verdict.decision);
   const isBuy = decision === "BUY";
   const isSell = decision === "SELL";
   const isHold = !isBuy && !isSell;
 
-  const symbol = (ticker || "STOCK").split(".")[0].toUpperCase();
+  const symbol = sanitizeTickerSymbol(ticker);
   const confidence = Math.round((verdict.confidence || 0.75) * 100);
 
   // Theme palettes based on institutional decision
@@ -125,7 +127,7 @@ export const OverviewVerdictCard = memo(function OverviewVerdictCard({
             </span>
           </div>
           <span className="font-sans text-[13px] sm:text-[15px] font-bold text-zinc-900 block truncate">
-            {verdict.entry_price || "Market"}
+            {sanitizePriceValue(verdict.entry_price, "Market")}
           </span>
         </div>
 
@@ -138,7 +140,7 @@ export const OverviewVerdictCard = memo(function OverviewVerdictCard({
             </span>
           </div>
           <span className={`font-sans text-[13px] sm:text-[15px] font-bold ${theme.targetText} block truncate`}>
-            {verdict.exit_price || "-"}
+            {sanitizePriceValue(verdict.exit_price, "-")}
           </span>
         </div>
 
@@ -151,7 +153,7 @@ export const OverviewVerdictCard = memo(function OverviewVerdictCard({
             </span>
           </div>
           <span className="font-sans text-[13px] sm:text-[15px] font-bold text-rose-700 block truncate">
-            {verdict.stop_loss || "-"}
+            {sanitizePriceValue(verdict.stop_loss, "-")}
           </span>
         </div>
 
@@ -164,7 +166,7 @@ export const OverviewVerdictCard = memo(function OverviewVerdictCard({
             </span>
           </div>
           <span className="font-sans text-[13px] sm:text-[15px] font-bold text-zinc-900 block truncate">
-            {verdict.hold_duration || verdict.strategy || "Swing"}
+            {sanitizeCleanText(verdict.hold_duration || verdict.strategy || "Swing")}
           </span>
         </div>
       </div>

@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { Loader2 } from "lucide-react";
 
 import { FormattedText } from "@/components/ui/FormattedText";
+import { sanitizeTickerSymbol } from "@/lib/sanitizer";
 import { 
   FundamentalGrowthChart,
   FundamentalProfitabilityChart,
@@ -124,11 +125,6 @@ export function FundamentalReportView({
   children?: React.ReactNode;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const canDownload = Boolean(reportData);
-
-  const handleDownloadPdf = () => {
-    window.print();
-  };
 
   // Extract analysis
   const analysis = reportData?.analysis || reportData || {};
@@ -167,21 +163,12 @@ export function FundamentalReportView({
           <div className="mb-3 flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1 shadow-sm w-fit">
             {accent && <div className="h-2 w-2 rounded-full" style={{ background: accent }} />}
             <span className="font-mono text-[11px] font-medium text-zinc-600 tracking-wider uppercase">
-              {ticker.split(".")[0]} · {status}
+              {sanitizeTickerSymbol(ticker)} · {status}
             </span>
           </div>
           <h2 className="text-3xl font-bold tracking-tight text-zinc-900 sm:text-4xl">
             {title}
           </h2>
-        </div>
-        <div className="flex items-center gap-4">
-          <button
-            disabled={!canDownload}
-            onClick={handleDownloadPdf}
-            className="flex items-center gap-1.5 rounded-md bg-gradient-to-b from-zinc-800 to-zinc-950 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2)] px-3 py-1.5 font-sans text-[11px] font-medium text-white transition-all hover:scale-105 hover:from-zinc-700 hover:to-zinc-950 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-          >
-            PDF
-          </button>
         </div>
       </div>
 

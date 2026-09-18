@@ -28,6 +28,7 @@ import dynamic from "next/dynamic";
 import { LoadingView } from "@/components/research/LoadingView";
 import { AgentPipelineTracker } from "@/components/research/AgentPipelineTracker";
 import { OverviewVerdictCard } from "@/components/research/OverviewVerdictCard";
+import { sanitizeTickerSymbol } from "@/lib/sanitizer";
 import { AppSidebar, type ViewKey } from "@/components/layout/AppSidebar";
 import { StockMetricsPanel } from "@/components/charts/StockMetricsPanel";
 import {
@@ -161,6 +162,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
       });
       const updatedData: AnalyseResponse = {
         ...current,
+        ticker: current.ticker || debateRes.ticker || ticker,
         bull_thesis: debateRes.bull_thesis || current.bull_thesis,
         bear_thesis: debateRes.bear_thesis || current.bear_thesis,
         verdict: debateRes.verdict || current.verdict,
@@ -171,7 +173,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
       setIsSaved(false);
       toast.success("Bull vs. Bear debate & verdict compiled successfully!");
     } catch (err: any) {
-      console.error("Failed to run debate", err);
+      console.warn("[Debate Notice]:", err);
       const errMsg = err?.message || "Failed to generate debate and verdict.";
       setDebateError(errMsg);
       toast.error(errMsg, { duration: 6000 });
@@ -412,7 +414,7 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
           </Link>
         </div>
         <div className="hidden sm:block font-mono text-[13px] text-[var(--muted-foreground)]">
-          {data.ticker.split(".")[0].toUpperCase()}.NS · NSE
+          {sanitizeTickerSymbol(data?.ticker || ticker)}.NS · NSE
         </div>
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {data && !data.verdict && (
@@ -577,10 +579,11 @@ export default function ResearchDashboardClient({ ticker }: { ticker: string }) 
           </div>
         )}
 
-        <main ref={mainRef} className="flex-1 min-w-0 overflow-y-auto overscroll-contain bg-[#fafafa] p-3 sm:p-4 md:p-6 print:overflow-visible print:h-auto print:block print:w-full print:m-0 print:p-0">
+        <main ref={mainRef} className="flex-1 min-w-0 overflow-y-auto overscroll-contain bg-[#fafafa] p-3 sm:p-4 md:p-6">
           <ViewSwitch
             view={view}
             data={data}
+            ticker={ticker}
             isAnalyzing={isAnalyzing}
             onTriggerDebate={handleTriggerDebate}
             debateLoading={debateLoading}
@@ -620,6 +623,7 @@ const AnalystPendingBanner = ({ role }: { role: string }) => (
 const ViewSwitch = memo(function ViewSwitch({
   view,
   data,
+  ticker,
   isAnalyzing,
   onTriggerDebate,
   debateLoading,
@@ -628,13 +632,14 @@ const ViewSwitch = memo(function ViewSwitch({
 }: {
   view: ViewKey;
   data: AnalyseResponse;
+  ticker?: string;
   isAnalyzing?: boolean;
   onTriggerDebate?: () => void;
   debateLoading?: boolean;
   debateError?: string | null;
   onSelectView?: (view: ViewKey) => void;
 }) {
-  const t = data.ticker;
+  const t = sanitizeTickerSymbol(data?.ticker || ticker);
 
   switch (view) {
     case "overview":
@@ -849,6 +854,7 @@ const ViewSwitch = memo(function ViewSwitch({
           ticker={t}
           data={data.verdict}
           chartsData={data.charts_data}
+          technicalData={data.technical_data}
           isAnalyzing={isAnalyzing}
           onTriggerDebate={onTriggerDebate}
           debateLoading={debateLoading}

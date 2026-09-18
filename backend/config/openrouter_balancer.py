@@ -11,16 +11,20 @@ logger = get_logger(__name__)
 
 
 DEFAULT_FREE_MODELS: List[str] = [
-    "nvidia/nemotron-3-super-120b-a12b:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "nvidia/nemotron-3.5-lightning:free",
-    "inclusionai/ling-3.0-flash-fin:free",
-    "inclusionai/ling-3.0-flash-sante:free",
-    "inclusionai/ling-3.0-flash-vl:free",
-    "nex-agi/nex-n2.5-pro:free",
-    "nex-agi/nex-n2.5-mini:free",
-    "dots-studio/dots-3-note-preview:free",
-    "thinking-machines/inkling-small:free",
+    # Tier 1: Ultra-Fast & 99% Available (Concurrent Analysis Primaries)
+    "inclusionai/ling-3.0-flash-fin:free",  # 11.7s p99, 99% avail
+    "inclusionai/ling-3.0-flash-sante:free",  # 11.7s p99, 99% avail (pure text)
+    "inclusionai/ling-3.0-flash-vl:free",  # 11.7s p99, 99% avail (multimodal / vision)
+    # Tier 2: Deep Context & High Availability (Debate & Synthesis)
+    "thinking-machines/inkling:free",  # 99s p99, 99% avail, 1.0M context
+    "nex-agi/nex-n2.5-pro:free",  # 127s p99, 95% avail
+    # Tier 3: Fast Secondary Fallback (75% avail, 17s latency vs 203s)
+    "nvidia/nemotron-3-super-120b-a12b:free",  # 17s p99, 75% avail
+    # Tier 4: High Context, High Availability, High Latency
+    "nvidia/nemotron-3.5-lightning:free",  # 203s p99, 94% avail, 1.0M context
+    # Tier 5: Lower Availability Tail (<75% avail)
+    "nvidia/nemotron-3-ultra-550b-a55b:free",  # 121s p99, 71% avail
+    "nex-agi/nex-n2.5-mini:free",  # 39.3s p99, 67% avail
 ]
 
 
@@ -96,6 +100,9 @@ AGENT_DISPLAY_ROLES: Dict[str, str] = {
     "BearResearcher": "Bear Researcher",
     "ResearchManager": "Research Manager",
 }
+
+# Roles that perform heavy multi-report synthesis and require extended timeouts
+DEBATE_MANAGER_AGENTS = {"BullResearcher", "BearResearcher", "ResearchManager"}
 
 
 class OpenRouterLoadBalancer:
@@ -190,6 +197,28 @@ class OpenRouterLoadBalancer:
             llm_kwargs["model"] = model_name
             if self.api_key:
                 llm_kwargs["openrouter_api_key"] = self.api_key
+
+            # Adaptive role-based timeout:
+            # Debate & Research Manager agents get 300s (5m); parallel analysts get 120s (2m).
+            default_timeout_s = (
+                300 if self.agent_name in DEBATE_MANAGER_AGENTS else 120
+            )
+            env_timeout = os.getenv("OPENROUTER_REQUEST_TIMEOUT") or os.getenv("OPENROUTER_TIMEOUT")
+            if env_timeout:
+                try:
+                    default_timeout_s = float(env_timeout)
+                except ValueError:
+                    pass
+
+            timeout_val = (
+                llm_kwargs.pop("request_timeout", None)
+                or llm_kwargs.pop("timeout", None)
+                or default_timeout_s
+            )
+            # If passed in seconds (<= 1000), convert to milliseconds for langchain-openrouter
+            if timeout_val <= 1000:
+                timeout_val = int(timeout_val * 1000)
+            llm_kwargs["request_timeout"] = timeout_val
 
             llm_inst = ChatOpenRouter(**llm_kwargs)
             base_runnable = (
